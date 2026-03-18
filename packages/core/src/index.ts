@@ -1,12 +1,13 @@
 // ============================================================
-// @jindan/core — barrel export
+// @jindan/core — barrel export (v2 refactored)
 // ============================================================
 
 export { ApiServer } from "./ApiServer.js";
-export { MVP_CONFIG } from "./config.js";
+// Infrastructure
 export { EventBus } from "./EventBus.js";
-export { CombatSystem } from "./systems/CombatSystem.js";
-export { CultivationSystem } from "./systems/CultivationSystem.js";
-export { ResourceSystem } from "./systems/ResourceSystem.js";
-export type * from "./types.js";
-export { World } from "./World.js";
+// Entity layer
+export type * from "./entity/index.js";
+export { ActionRegistry, createEntity, SPECIES } from "./entity/index.js";
+// World layer
+export type * from "./world/index.js";
+export { WORLD_CONFIG, QI_CONFIG, ABSORB_CONFIG, DEVOUR_CONFIG, BREAKTHROUGH_CONFIG, World } from "./world/index.js";

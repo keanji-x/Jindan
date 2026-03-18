@@ -1,6 +1,8 @@
 // ============================================================
-// ApiClient — HTTP client wrapping the core API
+// ApiClient — v2: HTTP client wrapping the unified action API
 // ============================================================
+
+import type { ActionId } from "@jindan/core";
 
 export class ApiClient {
   constructor(private readonly baseUrl: string) {}
@@ -25,48 +27,33 @@ export class ApiClient {
     return this.request<Record<string, unknown>>("GET", "/world/status");
   }
 
-  // ── Cultivator ─────────────────────────────────────────
+  // ── Entity ─────────────────────────────────────────────
 
-  createCultivator(name: string) {
-    return this.request<Record<string, unknown>>("POST", "/cultivator/create", { name });
-  }
-
-  getCultivator(id: string) {
-    return this.request<Record<string, unknown>>("GET", `/cultivator/${id}`);
-  }
-
-  // ── Actions ────────────────────────────────────────────
-
-  cultivate(cultivatorId: string) {
-    return this.request<Record<string, unknown>>("POST", "/action/cultivate", { cultivatorId });
-  }
-
-  breakthrough(cultivatorId: string) {
-    return this.request<Record<string, unknown>>("POST", "/action/breakthrough", { cultivatorId });
-  }
-
-  fightBeast(cultivatorId: string, beastId?: string) {
-    return this.request<Record<string, unknown>>("POST", "/action/fight-beast", {
-      cultivatorId,
-      beastId,
+  createEntity(name: string, species: "human" | "beast" | "plant") {
+    return this.request<Record<string, unknown>>("POST", "/entity/create", {
+      name,
+      species,
     });
   }
 
-  fightPvP(attackerId: string, defenderId: string) {
-    return this.request<Record<string, unknown>>("POST", "/action/fight-pvp", {
-      attackerId,
-      defenderId,
-    });
+  getEntity(id: string) {
+    return this.request<Record<string, unknown>>("GET", `/entity/${id}`);
   }
 
-  pickupStones(cultivatorId: string) {
-    return this.request<Record<string, unknown>>("POST", "/action/pickup-stones", { cultivatorId });
+  // ── Unified Action ─────────────────────────────────────
+
+  performAction(entityId: string, action: ActionId, targetId?: string) {
+    return this.request<Record<string, unknown>>("POST", "/action", {
+      entityId,
+      action,
+      targetId,
+    });
   }
 
   // ── Query ──────────────────────────────────────────────
 
-  getBeasts() {
-    return this.request<Record<string, unknown>[]>("GET", "/beasts");
+  getEntities() {
+    return this.request<Record<string, unknown>[]>("GET", "/entities");
   }
 
   getLeaderboard() {

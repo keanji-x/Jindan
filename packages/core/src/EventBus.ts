@@ -2,7 +2,7 @@
 // EventBus — typed pub/sub for world events
 // ============================================================
 
-import type { WorldEvent } from "./types.js";
+import type { WorldEvent } from "./world/types.js";
 
 export type EventHandler = (event: WorldEvent) => void;
 
