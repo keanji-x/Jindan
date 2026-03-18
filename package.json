@@ -1,0 +1,26 @@
+{
+  "name": "jindan",
+  "version": "0.1.0",
+  "private": true,
+  "description": "修仙世界模拟器 — Cultivation World Simulator",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces",
+    "dev:core": "npm run dev -w @jindan/core",
+    "dev:cli": "npm run dev -w @jindan/cli",
+    "test": "npm test --workspaces --if-present",
+    "lint": "biome lint packages/",
+    "fmt": "biome format --write packages/",
+    "check": "biome check packages/",
+    "check:fix": "biome check --write packages/",
+    "clean": "rm -rf packages/*/dist"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.8"
+  }
+}

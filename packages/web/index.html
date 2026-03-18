@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>金丹 · 修仙世界</title>
+  <meta name="description" content="修仙世界模拟器 — 实时观战面板">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;700&family=ZCOOL+KuaiLe&display=swap" rel="stylesheet">
+</head>
+<body>
+  <header>
+    <h1>🏔️ 金丹 · 修仙世界</h1>
+    <div id="connection-status" class="status-disconnected">未连接</div>
+  </header>
+
+  <main>
+    <!-- 世界资源面板 -->
+    <section id="world-panel" class="panel">
+      <h2>🌍 天地气象</h2>
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-label">纪日</div>
+          <div class="stat-value" id="tick">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">灵脉储量</div>
+          <div class="stat-value" id="vein-remaining">-</div>
+          <div class="stat-bar"><div class="stat-bar-fill" id="vein-bar"></div></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">天地灵气</div>
+          <div class="stat-value" id="ambient-qi">-</div>
+          <div class="stat-bar"><div class="stat-bar-fill qi-bar" id="qi-bar"></div></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">无主灵石</div>
+          <div class="stat-value" id="unclaimed-stones">0</div>
+        </div>
+      </div>
+    </section>
+
+    <div class="two-col">
+      <!-- 修仙者列表 -->
+      <section id="cultivators-panel" class="panel">
+        <h2>🧘 修仙者</h2>
+        <div id="cultivator-list" class="entity-list"></div>
+      </section>
+
+      <!-- 妖兽列表 -->
+      <section id="beasts-panel" class="panel">
+        <h2>🐉 妖兽</h2>
+        <div id="beast-list" class="entity-list"></div>
+      </section>
+    </div>
+
+    <!-- 事件日志 -->
+    <section id="log-panel" class="panel">
+      <h2>📜 天地异象录</h2>
+      <div id="event-log"></div>
+    </section>
+  </main>
+
+  <script src="js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,334 @@
+/* ============================================================
+   金丹 · 修仙世界 — Frontend Styles
+   ============================================================ */
+
+:root {
+  --bg-primary: #0a0e1a;
+  --bg-secondary: #111827;
+  --bg-card: #1a2035;
+  --bg-card-hover: #1f2a42;
+  --border: #2a3555;
+
+  --text-primary: #e8e0d4;
+  --text-secondary: #9ca3af;
+  --text-accent: #fbbf24;
+  --text-muted: #6b7280;
+
+  --color-qi: #60a5fa;
+  --color-vein: #a78bfa;
+  --color-stone: #fbbf24;
+  --color-danger: #ef4444;
+  --color-success: #34d399;
+  --color-combat: #f97316;
+
+  --glow-qi: 0 0 20px rgba(96, 165, 250, 0.3);
+  --glow-gold: 0 0 20px rgba(251, 191, 36, 0.3);
+
+  --font-serif: "Noto Serif SC", serif;
+  --font-display: "ZCOOL KuaiLe", cursive;
+
+  --radius: 12px;
+  --transition: 0.3s ease;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: var(--font-serif);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  min-height: 100vh;
+  line-height: 1.6;
+}
+
+/* ── Header ────────────────────────────────────────────── */
+
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.5rem 2rem;
+  background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  backdrop-filter: blur(12px);
+}
+
+header h1 {
+  font-family: var(--font-display);
+  font-size: 1.8rem;
+  background: linear-gradient(135deg, var(--text-accent), #f59e0b, #d97706);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  text-shadow: none;
+  letter-spacing: 0.1em;
+}
+
+.status-disconnected {
+  color: var(--color-danger);
+  font-size: 0.85rem;
+  padding: 0.3rem 0.8rem;
+  border: 1px solid var(--color-danger);
+  border-radius: 20px;
+  animation: pulse 2s infinite;
+}
+
+.status-connected {
+  color: var(--color-success);
+  font-size: 0.85rem;
+  padding: 0.3rem 0.8rem;
+  border: 1px solid var(--color-success);
+  border-radius: 20px;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* ── Main Layout ───────────────────────────────────────── */
+
+main {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+}
+
+@media (max-width: 768px) {
+  .two-col {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── Panel ─────────────────────────────────────────────── */
+
+.panel {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+  transition: border-color var(--transition);
+}
+
+.panel:hover {
+  border-color: rgba(251, 191, 36, 0.3);
+}
+
+.panel h2 {
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  color: var(--text-accent);
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+/* ── Stats Grid ────────────────────────────────────────── */
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 1rem;
+}
+
+.stat-card {
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  padding: 0.8rem 1rem;
+  text-align: center;
+  border: 1px solid transparent;
+  transition: all var(--transition);
+}
+
+.stat-card:hover {
+  border-color: var(--border);
+  transform: translateY(-2px);
+  box-shadow: var(--glow-gold);
+}
+
+.stat-label {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 0.3rem;
+}
+
+.stat-value {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: var(--text-accent);
+  font-family: var(--font-display);
+}
+
+/* ── Stat Bar ──────────────────────────────────────────── */
+
+.stat-bar {
+  height: 4px;
+  background: var(--bg-primary);
+  border-radius: 2px;
+  margin-top: 0.5rem;
+  overflow: hidden;
+}
+
+.stat-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--color-vein), #c4b5fd);
+  border-radius: 2px;
+  transition: width 0.5s ease;
+  width: 0%;
+}
+
+.stat-bar-fill.qi-bar {
+  background: linear-gradient(90deg, var(--color-qi), #93c5fd);
+}
+
+/* ── Entity List ───────────────────────────────────────── */
+
+.entity-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.entity-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.3rem;
+  transition: all var(--transition);
+  animation: fadeIn 0.3s ease;
+}
+
+.entity-card:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--color-qi);
+}
+
+.entity-name {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.entity-detail {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.entity-power {
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  color: var(--color-combat);
+  align-self: center;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ── Event Log ─────────────────────────────────────────── */
+
+#event-log {
+  max-height: 300px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+.log-entry {
+  padding: 0.35rem 0.6rem;
+  border-radius: 4px;
+  background: var(--bg-secondary);
+  border-left: 3px solid var(--border);
+  animation: slideIn 0.2s ease;
+  word-break: break-all;
+}
+
+.log-entry[data-type="combat_result"] {
+  border-left-color: var(--color-combat);
+}
+.log-entry[data-type="cultivator_breakthrough"] {
+  border-left-color: var(--color-stone);
+}
+.log-entry[data-type="cultivator_died"] {
+  border-left-color: var(--color-danger);
+}
+.log-entry[data-type="beast_spawned"] {
+  border-left-color: var(--color-success);
+}
+.log-entry[data-type="vein_depleted"] {
+  border-left-color: var(--color-danger);
+}
+.log-entry[data-type="qi_overflow"] {
+  border-left-color: var(--color-qi);
+}
+
+.log-tick {
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  margin-right: 0.5rem;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* ── Scrollbar ─────────────────────────────────────────── */
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
