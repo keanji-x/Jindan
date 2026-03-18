@@ -1,20 +1,15 @@
 #!/usr/bin/env node
 // ============================================================
-// Jindan CLI — AI-friendly command interface
-//
-// 设计原则:
-//   1. 每个指令都支持 --json 输出结构化数据
-//   2. 每次动作后都显示「可用动作」列表, 引导 AI 下一步决策
-//   3. 错误信息清晰, 包含修复建议
-//   4. 支持 positional args (简洁) 和 flags (明确) 两种形式
+// Jindan CLI — v2: all action info from ActionRegistry
 // ============================================================
 
 import { parseArgs } from "node:util";
+import { type ActionDef, type ActionId, ActionRegistry } from "@jindan/core";
 import { ApiClient } from "./ApiClient.js";
 import {
   formatActionResult,
-  formatBeasts,
-  formatCultivator,
+  formatEntities,
+  formatEntity,
   formatLeaderboard,
   formatWorld,
 } from "./format.js";
@@ -25,6 +20,7 @@ const { values, positionals } = parseArgs({
     host: { type: "string", default: "http://localhost:3001" },
     id: { type: "string", short: "i" },
     name: { type: "string", short: "n" },
+    species: { type: "string", short: "s" },
     target: { type: "string", short: "t" },
     json: { type: "boolean", default: false },
   },
@@ -34,14 +30,11 @@ const api = new ApiClient(values.host!);
 const command = positionals[0];
 const jsonMode = values.json!;
 
-type Formattable = Record<string, unknown> | Record<string, unknown>[];
-
-/** json 模式下输出原始 JSON, 否则用格式化函数 */
-function output(data: unknown, formatter?: (d: Formattable) => string) {
+function output(data: unknown, formatter?: (d: never) => string) {
   if (jsonMode || !formatter) {
     console.log(JSON.stringify(data, null, 2));
   } else {
-    console.log(formatter(data as Formattable));
+    console.log(formatter(data as never));
   }
 }
 
@@ -58,15 +51,16 @@ async function main() {
 
       case "info": {
         const id = values.id ?? positionals[1];
-        if (!id) throw usageError("info --id <id>", "查看修仙者详细信息");
-        const c = await api.getCultivator(id);
-        output(c, formatCultivator);
+        if (!id) throw usageError("info --id <id>", "查看生灵详细信息");
+        const e = await api.getEntity(id);
+        output(e, formatEntity);
         break;
       }
 
-      case "beasts": {
-        const beasts = await api.getBeasts();
-        output(beasts, formatBeasts);
+      case "entities":
+      case "list": {
+        const entities = await api.getEntities();
+        output(entities, formatEntities);
         break;
       }
 
@@ -77,68 +71,57 @@ async function main() {
         break;
       }
 
-      // ── 创建角色 ──────────────────────────────────────
+      // ── 创建生灵 ──────────────────────────────────────
       case "create": {
         const name = values.name ?? positionals[1];
-        if (!name) throw usageError("create --name <名字>", "创建一位新的修仙者");
-        const c = await api.createCultivator(name);
-        output(c, formatCultivator);
-        console.log(`\n💡 记住你的 ID: ${(c as Record<string, unknown>).id}`);
-        console.log(`💡 下一步: jindan cultivate --id ${(c as Record<string, unknown>).id}`);
-        break;
-      }
+        const species = (values.species ?? positionals[2] ?? "human") as
+          | "human"
+          | "beast"
+          | "plant";
+        if (!name)
+          throw usageError("create --name <名字> [--species human|beast|plant]", "创建一个生灵");
+        const e = await api.createEntity(name, species);
+        output(e, formatEntity);
+        const id = (e as Record<string, unknown>).id;
+        console.log(`\n💡 记住你的 ID: ${id}`);
 
-      // ── 核心动作 ──────────────────────────────────────
-      case "cultivate": {
-        const id = values.id ?? positionals[1];
-        if (!id) throw usageError("cultivate --id <id>", "修炼: 吸收灵气, 增长修为");
-        const r = await api.cultivate(id);
-        output(r, formatActionResult);
-        break;
-      }
-
-      case "breakthrough": {
-        const id = values.id ?? positionals[1];
-        if (!id)
-          throw usageError(
-            "breakthrough --id <id>",
-            "尝试境界突破 (需要经验 ≥ expToNext 且灵力 ≥ 50%)",
-          );
-        const r = await api.breakthrough(id);
-        output(r, formatActionResult);
-        break;
-      }
-
-      case "fight": {
-        const id = values.id ?? positionals[1];
-        if (!id)
-          throw usageError("fight --id <id> [--target <beastId>]", "狩猎妖兽 (不指定目标则随机)");
-        const r = await api.fightBeast(id, values.target);
-        output(r, formatActionResult);
-        break;
-      }
-
-      case "pvp": {
-        const attackerId = values.id ?? positionals[1];
-        const defenderId = values.target ?? positionals[2];
-        if (!attackerId || !defenderId) {
-          throw usageError("pvp --id <你的id> --target <对手id>", "发起修士对决 (败者死亡!)");
+        // Show first available action from registry
+        const firstAction = ActionRegistry.forSpecies(species).find(
+          (a: ActionDef) => a.id !== "rest",
+        );
+        if (firstAction) {
+          console.log(`💡 下一步: jindan ${firstAction.cliCommand} -i ${id}`);
         }
-        const r = await api.fightPvP(attackerId, defenderId);
-        output(r, formatActionResult);
         break;
       }
 
-      case "pickup": {
-        const id = values.id ?? positionals[1];
-        if (!id) throw usageError("pickup --id <id>", "拾取区域中散落的无主灵石");
-        const r = await api.pickupStones(id);
-        output(r, formatActionResult);
+      // ── 动作: 自动路由 ────────────────────────────────
+      default: {
+        // Check if command is a known action cliCommand
+        const actionDef = ActionRegistry.getAll().find((a: ActionDef) => a.cliCommand === command);
+        if (actionDef) {
+          const id = values.id ?? positionals[1];
+          if (!id)
+            throw usageError(
+              `${actionDef.cliCommand} --id <id>${actionDef.needsTarget ? " --target <tid>" : ""}`,
+              actionDef.description,
+            );
+
+          const target = actionDef.needsTarget ? (values.target ?? positionals[2]) : undefined;
+          if (actionDef.needsTarget && !target) {
+            throw usageError(
+              `${actionDef.cliCommand} --id <id> --target <targetId>`,
+              actionDef.description,
+            );
+          }
+
+          const r = await api.performAction(id, actionDef.id, target);
+          output(r, formatActionResult);
+        } else {
+          printHelp();
+        }
         break;
       }
-      default:
-        printHelp();
-        break;
     }
   } catch (err) {
     if (err instanceof UsageError) {
@@ -150,41 +133,45 @@ async function main() {
   }
 }
 
-// ── Help ──────────────────────────────────────────────────
+// ── Help (generated from ActionRegistry) ─────────────────
 
 function printHelp() {
+  const actions = ActionRegistry.getAll();
+
   console.log(`
 ╔═══════════════════════════════════════════════════════════╗
-║              🏔️  金丹 · 修仙世界 CLI  🏔️                ║
+║              🏔️  金丹 · 修仙世界 CLI v2  🏔️              ║
 ╠═══════════════════════════════════════════════════════════╣
 ║                                                           ║
 ║  📖 信息查询                                              ║
-║    world / status           查看世界状态                  ║
-║    info -i <id>             查看修仙者信息                ║
-║    beasts                   查看妖兽列表                  ║
+║    world / status           查看天地气象                  ║
+║    info -i <id>             查看生灵信息                  ║
+║    entities / list          查看所有生灵                  ║
 ║    leaderboard / rank       排行榜                        ║
 ║                                                           ║
-║  🧘 修炼动作                                              ║
-║    create -n <名字>         创建修仙者                    ║
-║    cultivate -i <id>        修炼 (吸灵气→涨经验)         ║
-║    breakthrough -i <id>     突破 (需经验+灵力充足)        ║
+║  🌟 创建生灵                                              ║
+║    create -n <名字> [-s human|beast|plant]                ║
 ║                                                           ║
-║  ⚔️  战斗动作                                              ║
-║    fight -i <id> [-t bid]   狩猎妖兽 (不指定则随机)      ║
-║    pvp -i <id> -t <id>      修士对决 (败者死亡!)          ║
-║                                                           ║
-║  💎 资源动作                                              ║
-║    pickup -i <id>           拾取无主灵石                  ║
-║                                                           ║
+║  ⚡ 动作                                                  ║`);
+
+  for (const a of actions) {
+    if (a.id === "rest") continue;
+    const targetHint = a.needsTarget ? " -t <tid>" : "";
+    const species = a.species.join("/");
+    const line = `    ${a.cliCommand.padEnd(24)}${a.cliHelp} [${species}]`;
+    console.log(`║  ${line.padEnd(56)}║`);
+  }
+
+  console.log(`║                                                           ║
 ║  🔧 全局选项                                              ║
 ║    --host <url>             API 地址 (默认 :3001)         ║
 ║    --json                   输出原始 JSON                 ║
 ║                                                           ║
 ║  💡 新手指引:                                              ║
-║    1. jindan create -n "你的名字"  → 记住返回的 id       ║
-║    2. jindan cultivate -i <id>     → 反复修炼            ║
-║    3. jindan info -i <id>          → 看看经验够了没      ║
-║    4. jindan breakthrough -i <id>  → 尝试突破!           ║
+║    1. jindan create -n "你的名字" -s human                ║
+║    2. jindan meditate -i <id>     → 吸收灵气              ║
+║    3. jindan info -i <id>         → 查看状态              ║
+║    4. jindan breakthrough -i <id> → 尝试突破!             ║
 ║                                                           ║
 ╚═══════════════════════════════════════════════════════════╝
   `);
