@@ -11,10 +11,10 @@ export const doBreakthrough: ActionHandler = (entity, _actionId, context) => {
   const { actionCost, ambientPool, tick, events } = context;
   const tankComp = entity.components.tank;
   const cultComp = entity.components.cultivation;
-  const combatComp = entity.components.combat;
+  const combatComp = entity.components.combat; // optional for plants
 
-  if (!tankComp || !cultComp || !combatComp) {
-    return { success: false, reason: "实体缺少必要组件(Tank, Cultivation, Combat)" };
+  if (!tankComp || !cultComp) {
+    return { success: false, reason: "实体缺少必要组件(Tank, Cultivation)" };
   }
 
   if (cultComp.realm >= 10) {
@@ -25,11 +25,12 @@ export const doBreakthrough: ActionHandler = (entity, _actionId, context) => {
   const coreCurrent = tankComp.tanks[core] ?? 0;
   const coreMax = tankComp.maxTanks[core] ?? 1;
 
-  if (coreCurrent / coreMax < 0.9) {
-    return { success: false, reason: "灵气未臻圆满(需90%容量)" };
+  const bt = UNIVERSE.breakthrough;
+
+  if (coreCurrent / coreMax < bt.minQiRatio) {
+    return { success: false, reason: `灵气未臻圆满(需${Math.round(bt.minQiRatio * 100)}%容量)` };
   }
 
-  const bt = UNIVERSE.breakthrough;
   const extraCost = bt.qiCostPerRealm * cultComp.realm;
   const totalCost = actionCost + extraCost;
 
@@ -60,9 +61,12 @@ export const doBreakthrough: ActionHandler = (entity, _actionId, context) => {
   for (const [pid, max] of Object.entries(newMaxTanks)) {
     tankComp.maxTanks[pid] = max;
   }
-  combatComp.power =
-    reactor.basePower(cultComp.realm) + Math.floor(Math.random() * cultComp.realm * 2);
+  if (combatComp) {
+    combatComp.power =
+      reactor.basePower(cultComp.realm) + Math.floor(Math.random() * cultComp.realm * 2);
+  }
 
+  const power = combatComp?.power ?? 0;
   events.emit({
     tick,
     type: "entity_breakthrough",
@@ -71,9 +75,9 @@ export const doBreakthrough: ActionHandler = (entity, _actionId, context) => {
       name: entity.name,
       species: entity.species,
       newRealm: cultComp.realm,
-      power: combatComp.power,
+      power,
     },
-    message: `✨「${entity.name}」突破成功！境界提升至 ${cultComp.realm} 阶，战力 ${combatComp.power}`,
+    message: `✨「${entity.name}」突破成功！境界提升至 ${cultComp.realm} 阶，战力 ${power}`,
   });
 
   return { success: true, newRealm: cultComp.realm, flux: totalCost };

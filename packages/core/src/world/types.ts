@@ -6,6 +6,7 @@
 
 import type { ParticleId } from "../engine/types.js";
 import type { ActionId, Entity, SpeciesType } from "../entity/types.js";
+import type { LedgerEvent } from "../ledger/types.js";
 
 /** 天地环境粒子池 (replaces old AmbientQi) */
 export interface AmbientPool {
@@ -32,10 +33,12 @@ export type WorldEventType =
   | "entity_breakthrough"
   | "entity_died"
   | "tick_complete"
+  | "system_warning"
   | "report";
 
 /** 世界事件 */
 export interface WorldEvent {
+  index: number; // 全局单调自增的事件序列号
   tick: number;
   type: WorldEventType;
   data: Record<string, unknown>;
@@ -66,6 +69,7 @@ export interface ActionResult<T = unknown> {
   tick: number;
   result?: T;
   events: WorldEvent[];
+  recentEvents: LedgerEvent[];
   availableActions: AvailableAction[];
   error?: string;
 }

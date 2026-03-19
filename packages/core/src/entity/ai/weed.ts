@@ -2,7 +2,7 @@ import type { AgentBrain, BrainDecision } from "./types.js";
 
 export const WeedBrain: AgentBrain = {
   id: "weed_brain",
-  decide(actions): BrainDecision | null {
+  decide(actions, _ctx): BrainDecision | null {
     // 草是极其简单的灵力累积器
     // 优先级 1: 尝试突破
     const brk = actions.find((a) => a.action === "breakthrough" && a.possible);

@@ -20,11 +20,13 @@ export class WorldLedger {
   private entities: Map<string, Entity> = new Map();
 
   constructor() {
+    // Use SA-tunable totalParticles as the initial ambient qi base
+    // SpawnPool will organically generate life from this ambient qi
     this.qiPool = new QiPoolManager(
-      100, // Barren world base capacity
+      UNIVERSE.totalParticles,
       UNIVERSE.particles as { id: string }[],
     );
-    this.graph = new LedgerGraph();
+    this.graph = new LedgerGraph(UNIVERSE.ledgerWindowSize);
   }
 
   // --- Entity 管理 ---

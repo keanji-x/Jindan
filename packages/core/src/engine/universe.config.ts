@@ -73,9 +73,9 @@ export const UNIVERSE: UniverseConfig = {
       id: "human",
       name: "修士",
       coreParticle: "ql",
-      baseTanks: (realm) => ({ ql: 100 * realm, qs: 0 }),
+      baseTanks: (realm) => ({ ql: 200 * realm, qs: 0 }),
       basePower: (realm) => 10 * realm,
-      baseDrainRate: 5,
+      baseDrainRate: 1,
       devourCrossEq: "digest_cross_l",
       devourSameEq: "digest_same_l",
       metabolismEq: "metabolize_l",
@@ -87,7 +87,7 @@ export const UNIVERSE: UniverseConfig = {
       coreParticle: "qs",
       baseTanks: (realm) => ({ qs: 80 * realm, ql: 0 }),
       basePower: (realm) => 12 * realm,
-      baseDrainRate: 10,
+      baseDrainRate: 3,
       devourCrossEq: "digest_cross_s",
       devourSameEq: "digest_same_s",
       metabolismEq: "metabolize_s",
@@ -99,41 +99,59 @@ export const UNIVERSE: UniverseConfig = {
       coreParticle: "ql",
       baseTanks: (realm) => ({ ql: 150 * realm, qs: 0 }),
       basePower: (realm) => 4 * realm,
-      baseDrainRate: 2,
+      baseDrainRate: 1,
       devourCrossEq: "digest_cross_l",
       devourSameEq: "digest_same_l",
       metabolismEq: "metabolize_l",
-      actions: ["photosynth", "rest"],
+      actions: ["photosynth", "breakthrough", "rest"],
     },
   },
 
   // ── World Constants ────────────────────────────────────────
-  totalParticles: 100_000,
-  initialAmbientRatio: 0.9,
-  initialBeasts: 5,
-  initialPlants: 3,
+  totalParticles: 1_000,
+  tickIntervalMs: 5_000,
+  ledgerWindowSize: 2000,
 
   // ── Breakthrough ───────────────────────────────────────────
   breakthrough: {
-    qiCostPerRealm: 50,
-    baseSuccessRate: 0.1,
-    maxSuccessRate: 0.8,
-    failLossRatio: 0.5,
+    qiCostPerRealm: 10,
+    /** Required qi ratio to attempt breakthrough */
+    minQiRatio: 0.9,
+    baseSuccessRate: 0.25,
+    maxSuccessRate: 0.85,
+    failLossRatio: 0,
   },
+
+  // ── Drain exponential base: drain = baseDrain × drainBase^(realm-1) ──
+  drainBase: 1.5,
+  /** QS infiltration k: higher = more QS seeps in when environment is polluted */
+  infiltrationK: 2,
+  /** QL dissipation k: higher = more QL leaks when ambient is sparse */
+  dissipationK: 2,
 
   // ── Absorb (particles pulled from ambient per action) ──────
   absorb: {
     meditate: { base: 20, perRealm: 5 },
-    moonlight: { base: 35, perRealm: 8 },
+    moonlight: { base: 20, perRealm: 5 },
     photosynth: { base: 8, perRealm: 2 },
   },
 
   // ── Devour sigmoid scaling factor ──────────────────────────
-  devourPowerScaling: 0.15,
+  devourPowerScaling: 0.3,
 
   // ── Passive Drain Formula ──────────────────────────────────
-  drainFormula: (baseDrain, totalParticles, ambientCore) => {
-    const ambient = Math.max(ambientCore, 1);
-    return baseDrain * Math.log(1 + totalParticles / ambient);
+  drainFormula: (baseDrain, _totalParticles, _ambientCore) => {
+    // Simplified: flat drain for more predictable survival curves
+    return baseDrain;
+  },
+
+  // ── Ecology Parameters ────────────────────────────────────
+  ecology: {
+    baseAmbientCap: 200,
+    ambientCapPerHuman: 200,
+    ambientCapPerBeast: 150,
+    ambientCapPerPlant: 100,
+    spawnBaseChance: 0.3,
+    maxEntities: 30,
   },
 };
