@@ -131,6 +131,32 @@ export class ApiServer {
       return this.world.createEntity(name, species as "human" | "beast" | "plant");
     }
 
+    if (method === "POST" && path.startsWith("/entity/")) {
+      const parts = path.split("/");
+      const id = parts[2]!;
+      if (parts[3] === "report") {
+        const text = body.text as string;
+        if (!text) throw new ApiError("text is required");
+        const e = this.world.getEntity(id);
+        if (!e) throw new ApiError("Entity not found");
+
+        const tick = this.world.tick;
+        this.world.ledger.recordEvent({
+          tick,
+          sourceId: id,
+          type: "report",
+          data: { text },
+        });
+        this.world.events.emit({
+          tick,
+          type: "report",
+          data: { entity: e, text },
+          message: `[思考] ${e.name} (${id}): ${text}`,
+        });
+        return { success: true, tick };
+      }
+    }
+
     if (method === "GET" && path.startsWith("/entity/")) {
       const parts = path.split("/");
       const id = parts[2]!;

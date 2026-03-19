@@ -1,12 +1,12 @@
 // ============================================================
-// Entity Factory — creating new entities with particle conservation
+// Entity Factory — creating new entities with Yin-Yang Conservation
 //
-// v3: Uses ReactorTemplate to initialize TankComponent.
+// v4: Yin-Yang (L vs S) Duality injection.
 // ============================================================
 
 import { nanoid } from "nanoid";
 import { UNIVERSE } from "../engine/index.js";
-import type { ParticleId, ReactorTemplate } from "../engine/types.js";
+import type { ParticleId } from "../engine/types.js";
 import type { Entity, SpeciesType } from "./types.js";
 
 /** Minimal interface for ambient pool (avoids circular dep) */
@@ -14,50 +14,25 @@ export interface AmbientPoolRef {
   pools: Record<ParticleId, number>;
 }
 
-const BEAST_NAMES = [
-  "赤焰虎",
-  "碧水蛟",
-  "风翼鹰",
-  "玄铁熊",
-  "紫电狼",
-  "幽冥蛇",
-  "金鬃狮",
-  "霜角鹿",
-  "烈焰蝠",
-  "寒霜蜘蛛",
-  "青鳞蟒",
-  "银月狐",
-  "雷云豹",
-  "铁甲龟",
-  "血影鹤",
-];
+const BEAST_NAMES = ["赤焰虎", "碧水蛟", "风翼鹰", "玄铁熊", "紫电狼", "幽冥蛇", "噬煞黑蝇"];
 
-const PLANT_NAMES = [
-  "碧灵草",
-  "七星莲",
-  "紫薇藤",
-  "玄冰花",
-  "赤炎果",
-  "月华兰",
-  "龙血木",
-  "星辰菌",
-  "凝露苔",
-  "灵脉根",
-];
+const PLANT_NAMES = ["碧灵草", "七星莲", "紫薇藤", "玄冰花", "黑莲"];
 
-/** Helper: total core particles available from ambient */
-function coreAvailable(reactor: ReactorTemplate, ambient: AmbientPoolRef): number {
-  return ambient.pools[reactor.coreParticle] ?? 0;
+/** 阴阳同界注入：出生物质的等量逆向反噬 */
+function applyYinYangBirth(coreParticle: ParticleId, amount: number, ambient: AmbientPoolRef) {
+  const opposite = coreParticle === "ql" ? "sz" : "ql";
+  ambient.pools[opposite] = (ambient.pools[opposite] ?? 0) + amount;
 }
 
-/** Create a player entity, deducting initial particles from ambient */
+/** Create a player entity, triggering Yin-Yang inflation */
 export function createEntity(name: string, species: SpeciesType, ambient: AmbientPoolRef): Entity {
   const reactor = UNIVERSE.reactors[species]!;
   const realm = 1;
   const maxTanks = reactor.baseTanks(realm);
-  const coreMax = maxTanks[reactor.coreParticle] ?? 0;
-  const initialCore = Math.min(coreMax, coreAvailable(reactor, ambient));
-  ambient.pools[reactor.coreParticle] = (ambient.pools[reactor.coreParticle] ?? 0) - initialCore;
+  const initialCore = maxTanks[reactor.coreParticle] ?? 100;
+
+  // Apply Yin-Yang pollution
+  applyYinYangBirth(reactor.coreParticle, initialCore, ambient);
 
   const tanks: Record<ParticleId, number> = {};
   for (const p of UNIVERSE.particles) {
@@ -81,18 +56,17 @@ export function createEntity(name: string, species: SpeciesType, ambient: Ambien
   };
 }
 
-/** Spawn a batch of NPC beasts */
-export function spawnBeasts(count: number, totalCore: number, ambient: AmbientPoolRef): Entity[] {
-  const perEntity = Math.floor(totalCore / count);
+/** Spawn a batch of NPC beasts with brains */
+export function spawnBeasts(count: number, ambient: AmbientPoolRef): Entity[] {
   const entities: Entity[] = [];
   const reactor = UNIVERSE.reactors.beast!;
 
   for (let i = 0; i < count; i++) {
-    const rank = 1 + Math.floor(Math.random() * 3);
+    const rank = 1 + Math.floor(Math.random() * 2);
     const maxTanks = reactor.baseTanks(rank);
-    const coreMax = maxTanks[reactor.coreParticle] ?? 0;
-    const core = Math.min(perEntity, coreMax);
-    ambient.pools[reactor.coreParticle] = (ambient.pools[reactor.coreParticle] ?? 0) - core;
+    const core = maxTanks[reactor.coreParticle] ?? 100;
+
+    applyYinYangBirth(reactor.coreParticle, core, ambient);
 
     const tanks: Record<ParticleId, number> = {};
     for (const p of UNIVERSE.particles) {
@@ -109,23 +83,23 @@ export function spawnBeasts(count: number, totalCore: number, ambient: AmbientPo
         tank: { tanks, maxTanks: { ...maxTanks }, coreParticle: reactor.coreParticle },
         combat: { power: reactor.basePower(rank) + Math.floor(Math.random() * rank * 2) },
         cultivation: { realm: rank },
+        brain: { id: "miasma_brain" },
       },
     });
   }
   return entities;
 }
 
-/** Spawn a batch of NPC plants */
-export function spawnPlants(count: number, totalCore: number, ambient: AmbientPoolRef): Entity[] {
-  const perEntity = Math.floor(totalCore / count);
+/** Spawn a batch of NPC plants with brains */
+export function spawnPlants(count: number, ambient: AmbientPoolRef): Entity[] {
   const entities: Entity[] = [];
   const reactor = UNIVERSE.reactors.plant!;
 
   for (let i = 0; i < count; i++) {
     const maxTanks = reactor.baseTanks(1);
-    const coreMax = maxTanks[reactor.coreParticle] ?? 0;
-    const core = Math.min(perEntity, coreMax);
-    ambient.pools[reactor.coreParticle] = (ambient.pools[reactor.coreParticle] ?? 0) - core;
+    const core = maxTanks[reactor.coreParticle] ?? 50;
+
+    applyYinYangBirth(reactor.coreParticle, core, ambient);
 
     const tanks: Record<ParticleId, number> = {};
     for (const p of UNIVERSE.particles) {
@@ -141,6 +115,7 @@ export function spawnPlants(count: number, totalCore: number, ambient: AmbientPo
       components: {
         tank: { tanks, maxTanks: { ...maxTanks }, coreParticle: reactor.coreParticle },
         cultivation: { realm: 1 },
+        brain: { id: "weed_brain" },
       },
     });
   }

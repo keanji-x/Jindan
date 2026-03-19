@@ -9,6 +9,7 @@ import { EventBus } from "../EventBus.js";
 import { UNIVERSE } from "../engine/index.js";
 import { ActionRegistry } from "../entity/actions/index.js";
 import type { ActionContext, ActionId } from "../entity/actions/types.js";
+import { AiRegistry } from "../entity/ai/AiRegistry.js";
 import { createEntity, spawnBeasts, spawnPlants } from "../entity/factory.js";
 import { SPECIES } from "../entity/index.js";
 import type { Entity, SpeciesType } from "../entity/types.js";
@@ -29,23 +30,11 @@ export class World {
   constructor() {
     this.ledger = new WorldLedger();
 
-    const totalParticles = UNIVERSE.totalParticles;
-    const ambientTotal = Math.floor(totalParticles * UNIVERSE.initialAmbientRatio);
-    const reservedParticles = totalParticles - ambientTotal;
-
     // Spawn NPCs
-    for (const b of spawnBeasts(
-      WORLD_CONFIG.initialBeastCount,
-      reservedParticles * 0.7,
-      this.ledger.qiPool.state,
-    )) {
+    for (const b of spawnBeasts(WORLD_CONFIG.initialBeastCount, this.ledger.qiPool.state)) {
       this.ledger.setEntity(b);
     }
-    for (const p of spawnPlants(
-      WORLD_CONFIG.initialPlantCount,
-      reservedParticles * 0.3,
-      this.ledger.qiPool.state,
-    )) {
+    for (const p of spawnPlants(WORLD_CONFIG.initialPlantCount, this.ledger.qiPool.state)) {
       this.ledger.setEntity(p);
     }
     this.registerHandlers();
@@ -201,18 +190,79 @@ export class World {
 
   // ── Tick Engine ──────────────────────────────────────────
 
+  private tickPending: boolean = false;
+
   private accumulateFlux(amount: number) {
     this.qiFlux += amount;
     const threshold = UNIVERSE.totalParticles * 0.01; // 1%
-    while (this.qiFlux >= threshold) {
+    if (this.qiFlux >= threshold && !this.tickPending) {
+      this.tickPending = true;
+      setTimeout(() => this.processNextTick(), 0);
+    }
+  }
+
+  private processNextTick() {
+    const threshold = UNIVERSE.totalParticles * 0.01;
+    if (this.qiFlux >= threshold) {
       this.qiFlux -= threshold;
       this.advanceTick();
+    }
+
+    if (this.qiFlux >= threshold) {
+      setTimeout(() => this.processNextTick(), 0);
+    } else {
+      this.tickPending = false;
     }
   }
 
   private advanceTick(): void {
     this._tick += 1;
-    drainAll(this.getAliveEntities(), this.ledger.qiPool.state, this._tick, this.events);
+    const aliveEntities = this.getAliveEntities();
+
+    // 1. 结算固有消耗 (气血流失)
+    drainAll(aliveEntities, this.ledger.qiPool.state, this._tick, this.events);
+
+    // 2. 动态容量结算与虚空放逐 (防刷核心机制)
+    // 基础天花板 100，每一个活着的生灵提供 100~200 的容量加持
+    let maxCap = 100;
+    for (const e of aliveEntities) {
+      if (e.species === "human") maxCap += 200;
+      else if (e.species === "beast") maxCap += 150;
+      else if (e.species === "plant") maxCap += 100;
+    }
+    const ambient = this.ledger.qiPool.state;
+    if ((ambient.pools.ql ?? 0) > maxCap) ambient.pools.ql = maxCap;
+    if ((ambient.pools.sz ?? 0) > maxCap) ambient.pools.sz = maxCap;
+
+    // 3. 驱动后台 AI (原生行为树)
+    for (const entity of aliveEntities) {
+      const brainId = entity.components.brain?.id;
+      if (brainId && entity.alive) {
+        const brain = AiRegistry.get(brainId);
+        if (brain) {
+          try {
+            const decision = brain.decide(this.getAvailableActions(entity.id));
+            if (decision) {
+              this.performAction(entity.id, decision.action, decision.targetId);
+            }
+          } catch {
+            // ignore NPC errors
+          }
+        }
+      }
+    }
+
+    // 4. 底层大千生态自演化 (无常生灭)
+    // 如果天地间灵植太少，天道自动孕育碧灵草维持生态底噪
+    const plants = aliveEntities.filter((e) => e.species === "plant");
+    if (plants.length < 5 && Math.random() < 0.2) {
+      for (const p of spawnPlants(1, ambient)) this.ledger.setEntity(p);
+    }
+    // 如果环境极度恶化 (煞气爆表)，天道降下噬煞蝇
+    if ((ambient.pools.sz ?? 0) > (ambient.pools.ql ?? 0) * 1.5 && Math.random() < 0.3) {
+      for (const b of spawnBeasts(1, ambient)) this.ledger.setEntity(b);
+    }
+
     this.events.emit({
       tick: this._tick,
       type: "tick_complete",
@@ -223,34 +273,65 @@ export class World {
 
   // ── Helpers ──────────────────────────────────────────────
 
-  getAvailableActions(entityId: string): AvailableAction[] {
+  getAvailableActions(entityId: string, maxSamples: number = 16): AvailableAction[] {
     const entity = this.ledger.getEntity(entityId);
     if (!entity?.alive) return [];
 
     const speciesActions = ActionRegistry.forSpecies(entity.species);
-    const targetCount = this.getAliveEntities().filter((e) => e.id !== entityId).length;
+    const aliveTargets = this.getAliveEntities().filter((e) => e.id !== entityId);
+    const allOptions: AvailableAction[] = [];
 
-    return speciesActions.map((def) => {
-      let desc = def.description;
-      if (def.id === "devour") desc = `${def.name} (${targetCount} 目标)`;
-      const cultComp = entity.components.cultivation;
-      if (def.id === "breakthrough" && cultComp) {
-        const tankComp = entity.components.tank;
-        if (tankComp) {
-          const core = tankComp.coreParticle;
-          const ratio = (tankComp.tanks[core] ?? 0) / (tankComp.maxTanks[core] ?? 1);
-          desc = `${def.name} (${Math.floor(ratio * 100)}%)`;
+    for (const def of speciesActions) {
+      const check = this.canAct(entity, def);
+      if (!check.ok) {
+        let desc = def.name;
+        if (def.id === "breakthrough") {
+          const cultComp = entity.components.cultivation;
+          const tankComp = entity.components.tank;
+          if (cultComp && tankComp) {
+            const core = tankComp.coreParticle;
+            const ratio = (tankComp.tanks[core] ?? 0) / (tankComp.maxTanks[core] ?? 1);
+            desc = `${def.name} (${Math.floor(ratio * 100)}%)`;
+          }
         }
+        allOptions.push({
+          action: def.id as ActionId,
+          description: desc,
+          possible: false,
+          reason: check.reason,
+        });
+        continue;
       }
 
-      const check = this.canAct(entity, def);
-      return {
-        action: def.id as ActionId,
-        description: desc,
-        possible: check.ok,
-        reason: check.ok ? undefined : check.reason,
-      };
-    });
+      if (def.needsTarget) {
+        for (const t of aliveTargets) {
+          allOptions.push({
+            action: def.id as ActionId,
+            targetId: t.id,
+            description: `${def.name} -> ${t.name}(${t.id}) [Role: ${t.species}]`,
+            possible: true,
+          });
+        }
+      } else {
+        let desc = def.name;
+        if (def.id === "breakthrough") desc = `${def.name} (Ready!)`;
+
+        allOptions.push({
+          action: def.id as ActionId,
+          description: desc,
+          possible: true,
+        });
+      }
+    }
+
+    const possibleActions = allOptions.filter((a) => a.possible);
+    const impossibleActions = allOptions.filter((a) => !a.possible);
+
+    // 随机采样 possible 的 Action
+    possibleActions.sort(() => Math.random() - 0.5);
+    const sampled = possibleActions.slice(0, maxSamples);
+
+    return [...sampled, ...impossibleActions];
   }
 
   private canAct(

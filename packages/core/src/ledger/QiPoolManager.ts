@@ -4,18 +4,17 @@ import type { QiPoolState } from "./types.js";
 export class QiPoolManager {
   public state: QiPoolState;
 
-  constructor(totalParticles: number, initialAmbientRatio: number, particles: { id: string }[]) {
-    const ambientTotal = Math.floor(totalParticles * initialAmbientRatio);
+  constructor(baseCapacity: number, particles: { id: string }[]) {
     const pools: Record<string, number> = {};
     for (const p of particles) pools[p.id] = 0;
 
-    if (particles.length > 0) {
-      pools[particles[0]!.id] = ambientTotal;
-    }
+    // The universe starts barren with a base capacity, e.g. 100 ql, 10 sz
+    if (particles.find((p) => p.id === "ql")) pools.ql = baseCapacity;
+    if (particles.find((p) => p.id === "sz")) pools.sz = Math.floor(baseCapacity * 0.1);
 
     this.state = {
       pools,
-      total: totalParticles,
+      total: baseCapacity * 1.1, // Now total is just a tracked snapshot value or kept for legacy
     };
   }
 

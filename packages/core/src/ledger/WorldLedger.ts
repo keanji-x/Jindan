@@ -1,3 +1,4 @@
+import { nanoid } from "nanoid";
 import { UNIVERSE } from "../engine/index.js";
 import type { Entity } from "../entity/types.js";
 import { LedgerGraph } from "./LedgerGraph.js";
@@ -20,8 +21,7 @@ export class WorldLedger {
 
   constructor() {
     this.qiPool = new QiPoolManager(
-      UNIVERSE.totalParticles,
-      UNIVERSE.initialAmbientRatio,
+      100, // Barren world base capacity
       UNIVERSE.particles as { id: string }[],
     );
     this.graph = new LedgerGraph();
@@ -55,7 +55,7 @@ export class WorldLedger {
   recordEvent(event: Omit<LedgerEvent, "id">): LedgerEvent {
     const fullEvent: LedgerEvent = {
       ...event,
-      id: crypto.randomUUID(),
+      id: nanoid(),
     };
     this.graph.append(fullEvent);
     return fullEvent;

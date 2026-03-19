@@ -31,7 +31,8 @@ export type WorldEventType =
   | "entity_devoured"
   | "entity_breakthrough"
   | "entity_died"
-  | "tick_complete";
+  | "tick_complete"
+  | "report";
 
 /** 世界事件 */
 export interface WorldEvent {
@@ -53,6 +54,7 @@ export interface DevourResult {
 /** 可用动作 */
 export interface AvailableAction {
   action: ActionId;
+  targetId?: string;
   description: string;
   possible: boolean;
   reason?: string;

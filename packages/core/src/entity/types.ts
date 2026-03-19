@@ -44,6 +44,7 @@ export interface Entity {
     tank?: TankComponent;
     combat?: CombatComponent;
     cultivation?: CultivationComponent;
+    brain?: { id: string };
   };
 }
 

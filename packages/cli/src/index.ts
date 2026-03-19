@@ -82,6 +82,16 @@ async function main() {
         break;
       }
 
+      // ── Agent 内部沟通 (思考日志) ────────────────────────
+      case "report": {
+        const id = values.id ?? positionals[1];
+        const text = positionals[2];
+        if (!id || !text) throw new Error('Usage: jindan report <id> "<text>"');
+        const r = await api.postReport(id, text);
+        toJSON(r);
+        break;
+      }
+
       default: {
         console.log(`
 Jindan AI Agent CLI
@@ -92,6 +102,7 @@ Commands:
   memory    - Recall past interactions:     jindan memory <id>
   plan      - List available actions:       jindan plan <id>
   act       - Execute an action:            jindan act <id> <actionId> [targetId]
+  report    - Report internal thoughts:     jindan report <id> "<thoughts>"
 
 Options:
   --host    - API endpoint (default: http://localhost:3001)

@@ -52,6 +52,10 @@ export class ApiClient {
     return this.request<Record<string, unknown>[]>("GET", `/entity/${id}/plan`);
   }
 
+  postReport(id: string, text: string) {
+    return this.request<Record<string, unknown>>("POST", `/entity/${id}/report`, { text });
+  }
+
   // ── Unified Action ─────────────────────────────────────
 
   performAction(entityId: string, action: ActionId, targetId?: string) {

@@ -10,7 +10,12 @@ export interface QiPoolState {
 }
 
 /** 账本：边类型 */
-export type LedgerEventType = ActionId | "system_created" | "system_died" | "tick_advance";
+export type LedgerEventType =
+  | ActionId
+  | "system_created"
+  | "system_died"
+  | "tick_advance"
+  | "report";
 
 /** 账本：记录实体交互或事件的有向边 */
 export interface LedgerEvent {
