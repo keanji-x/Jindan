@@ -9,12 +9,13 @@ import { EventBus } from "../EventBus.js";
 import { BALANCE } from "../engine/balance.config.js";
 import { UNIVERSE } from "../engine/index.js";
 import { applyParams } from "../engine/TunableParams.js";
+import { doChat } from "../entity/actions/chat.js";
 import { ActionRegistry } from "../entity/actions/index.js";
 import type { ActionContext, ActionId } from "../entity/actions/types.js";
 import { createEntity } from "../entity/factory.js";
 import { SPECIES } from "../entity/index.js";
-import type { Entity, SpeciesType } from "../entity/types.js";
-import { type LedgerEventType, WorldLedger } from "../ledger/index.js";
+import type { Entity, Life, SpeciesType } from "../entity/types.js";
+import { type EntityHistory, type LedgerEventType, WorldLedger } from "../ledger/index.js";
 import { doAbsorb } from "./AbsorbSystem.js";
 import { doBreakthrough } from "./BreakthroughSystem.js";
 import { doDevour } from "./DevourSystem.js";
@@ -48,13 +49,21 @@ export class World {
       if (event.data.loser) targetId = (event.data.loser as { id: string }).id;
       else if (event.data.target) targetId = (event.data.target as { id: string }).id;
 
-      this.ledger.recordEvent({
+      const recorded = this.ledger.recordEvent({
         tick: event.tick,
         sourceId,
         targetId,
         type: event.type as unknown as LedgerEventType,
         data: event.data,
       });
+
+      // Track event ID in entity's life.events (skip entombed entities)
+      const srcEntity = this.ledger.getEntity(sourceId);
+      if (srcEntity && srcEntity.status !== "entombed") srcEntity.life.events.push(recorded.id);
+      if (targetId) {
+        const tgtEntity = this.ledger.getEntity(targetId);
+        if (tgtEntity && tgtEntity.status !== "entombed") tgtEntity.life.events.push(recorded.id);
+      }
     });
   }
 
@@ -64,6 +73,7 @@ export class World {
     ActionRegistry.registerHandler("photosynth", doAbsorb);
     ActionRegistry.registerHandler("devour", doDevour);
     ActionRegistry.registerHandler("breakthrough", doBreakthrough);
+    ActionRegistry.registerHandler("chat", doChat);
     ActionRegistry.registerHandler("rest", (entity, _actionId, ctx) => {
       const { actionCost, ambientPool } = ctx;
       const tankComp = entity.components.tank;
@@ -92,6 +102,13 @@ export class World {
   getAliveEntities(species?: SpeciesType): Entity[] {
     const all = this.ledger.getAliveEntities();
     return species ? all.filter((e) => e.species === species) : all;
+  }
+
+  /** 获取所有已死的有灵智实体 (lingering + entombed) */
+  getDeadEntities(): Entity[] {
+    return this.ledger
+      .getAllEntities()
+      .filter((e) => e.sentient && (e.status === "lingering" || e.status === "entombed"));
   }
 
   getSnapshot() {
@@ -124,13 +141,18 @@ export class World {
 
   // ── Unified Action Dispatch ──────────────────────────────
 
-  performAction(entityId: string, action: ActionId, targetId?: string): ActionResult {
+  performAction(
+    entityId: string,
+    action: ActionId,
+    targetId?: string,
+    payload?: unknown,
+  ): ActionResult {
     const tickEvents: WorldEvent[] = [];
     const unsub = this.events.onAny((e) => tickEvents.push(e));
 
     try {
       const entity = this.ledger.getEntity(entityId);
-      if (!entity?.alive) {
+      if (!entity || entity.status !== "alive") {
         return this.fail("生灵不存在或已消亡", tickEvents);
       }
 
@@ -154,19 +176,32 @@ export class World {
         ambientPool: this.ledger.qiPool.state,
         tick: this._tick,
         events: this.events,
+        payload,
       };
 
       let target: Entity | undefined;
       if (actionDef.needsTarget) {
         if (!targetId) return this.fail(`${actionDef.name}需要指定目标`, tickEvents);
         target = this.ledger.getEntity(targetId);
-        if (!target?.alive) return this.fail("目标不存在或已消亡", tickEvents);
+        if (!target || target.status !== "alive")
+          return this.fail("目标不存在或已消亡", tickEvents);
         ctx.target = target;
       }
 
       const result = handler(entity, action, ctx);
 
-      // Flux kept for display/lore but no longer drives ticks
+      // If handler itself failed, propagate failure
+      if (!result.success) {
+        return {
+          success: false,
+          tick: this._tick,
+          result,
+          events: tickEvents,
+          error: (result.reason as string) ?? "行动执行失败",
+          recentEvents: this.ledger.graph.getRecentForEntity(entityId),
+          availableActions: entity.status === "alive" ? this.getAvailableActions(entityId) : [],
+        };
+      }
 
       return {
         success: true,
@@ -174,7 +209,7 @@ export class World {
         result,
         events: tickEvents,
         recentEvents: this.ledger.graph.getRecentForEntity(entityId),
-        availableActions: entity.alive ? this.getAvailableActions(entityId) : [],
+        availableActions: entity.status === "alive" ? this.getAvailableActions(entityId) : [],
       };
     } finally {
       unsub();
@@ -228,7 +263,7 @@ export class World {
 
   getAvailableActions(entityId: string, maxSamples: number = 16): AvailableAction[] {
     const entity = this.ledger.getEntity(entityId);
-    if (!entity?.alive) return [];
+    if (!entity || entity.status !== "alive") return [];
 
     const speciesActions = ActionRegistry.forSpecies(entity.species);
     const aliveTargets = this.getAliveEntities().filter((e) => e.id !== entityId);
@@ -334,5 +369,108 @@ export class World {
       availableActions: [],
       error,
     };
+  }
+
+  // ── 坟墓系统 (Tomb System) ─────────────────────────────
+
+  /** 查询生灵的生死状态与生平 */
+  getLifeStatus(entityId: string): { status: string; life: Life } | undefined {
+    const entity = this.ledger.getEntity(entityId);
+    if (!entity) return undefined;
+    return { status: entity.status, life: entity.life };
+  }
+
+  /**
+   * 游魂执行盖棺定论：将 article + events 聚合为墓志铭，然后安息。
+   * 只有 status === "lingering" 的实体可以执行。
+   */
+  performTomb(entityId: string): {
+    success: boolean;
+    epitaph?: string;
+    snapshot?: { events: string[]; history: EntityHistory };
+    error?: string;
+  } {
+    const entity = this.ledger.getEntity(entityId);
+    if (!entity) return { success: false, error: "实体不存在" };
+    if (entity.status !== "lingering") {
+      return { success: false, error: `实体状态为「${entity.status}」，只有游魂才能盖棺定论` };
+    }
+
+    // 1. Snapshot: pull all events from this life
+    const history = this.ledger.graph.getEntityHistory(entityId);
+    const allLifeEvents = entity.life.events;
+
+    // 2. Build epitaph: aggregate old article + this life's event summary
+    const eventSummaryLines: string[] = [];
+    const allEvents = [...history.actionsInitiated, ...history.actionsReceived];
+    // Sort by tick for chronological order
+    allEvents.sort((a, b) => a.tick - b.tick);
+    for (const evt of allEvents) {
+      const direction = evt.sourceId === entityId ? "→" : "←";
+      const other = evt.sourceId === entityId ? (evt.targetId ?? "天地") : evt.sourceId;
+      const dataStr = evt.data ? JSON.stringify(evt.data) : "";
+      eventSummaryLines.push(`[第${evt.tick}天] ${direction} ${evt.type} (${other}) ${dataStr}`);
+    }
+
+    const previousArticle = entity.life.article;
+    const lifeChapter = eventSummaryLines.join("\n");
+    const epitaph = previousArticle ? `${previousArticle}\n\n---\n\n${lifeChapter}` : lifeChapter;
+
+    // 3. Entomb: update entity state
+    entity.status = "entombed";
+    entity.life.article = epitaph;
+    entity.life.events = [];
+
+    // 4. Emit event
+    this.events.emit({
+      tick: this._tick,
+      type: "entity_tomb",
+      data: {
+        entity: { id: entity.id, name: entity.name, species: entity.species },
+        epitaph,
+      },
+      message: `🪦「${entity.name}」盖棺定论，魂归安息`,
+    });
+
+    return {
+      success: true,
+      epitaph,
+      snapshot: { events: allLifeEvents, history },
+    };
+  }
+
+  /**
+   * 转生：从安息实体的墓志铭创建新生灵，继承前世 article。
+   * 只有 status === "entombed" 的实体可以转生。
+   */
+  reincarnate(
+    entityId: string,
+    newName: string,
+    newSpecies: SpeciesType,
+  ): { success: boolean; entity?: Entity; error?: string } {
+    const oldEntity = this.ledger.getEntity(entityId);
+    if (!oldEntity) return { success: false, error: "实体不存在" };
+    if (oldEntity.status !== "entombed") {
+      return { success: false, error: `实体状态为「${oldEntity.status}」，只有安息者才能转生` };
+    }
+
+    // Create new entity
+    const newEntity = createEntity(newName, newSpecies, this.ledger.qiPool.state);
+    // Inherit article from past life
+    newEntity.life.article = oldEntity.life.article;
+    this.ledger.setEntity(newEntity);
+
+    this.events.emit({
+      tick: this._tick,
+      type: "entity_reincarnated",
+      data: {
+        oldEntity: { id: oldEntity.id, name: oldEntity.name, species: oldEntity.species },
+        newEntity: { id: newEntity.id, name: newEntity.name, species: newEntity.species },
+        articleLength: newEntity.life.article.length,
+      },
+      message: `🔄「${oldEntity.name}」转生为「${newName}」，携带前世记忆（${newEntity.life.article.length}字）`,
+    });
+
+    return { success: true, entity: newEntity };
   }
 }

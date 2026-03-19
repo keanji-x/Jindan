@@ -45,7 +45,9 @@ export function createEntity(name: string, species: SpeciesType, ambient: Ambien
     id: `${species[0]}_${nanoid(8)}`,
     name,
     species,
-    alive: true,
+    status: "alive",
+    sentient: true,
+    life: { article: "", events: [] },
     components: {
       tank: { tanks, maxTanks: { ...maxTanks }, coreParticle: reactor.coreParticle },
       cultivation: { realm },
@@ -78,7 +80,9 @@ export function spawnBeasts(count: number, ambient: AmbientPoolRef): Entity[] {
       id: `b_${nanoid(8)}`,
       name: `${rank}阶${name}`,
       species: "beast",
-      alive: true,
+      status: "alive",
+      sentient: false,
+      life: { article: "", events: [] },
       components: {
         tank: { tanks, maxTanks: { ...maxTanks }, coreParticle: reactor.coreParticle },
         combat: { power: reactor.basePower(rank) + Math.floor(Math.random() * rank * 2) },
@@ -111,11 +115,13 @@ export function spawnPlants(count: number, ambient: AmbientPoolRef): Entity[] {
       id: `p_${nanoid(8)}`,
       name,
       species: "plant",
-      alive: true,
+      status: "alive",
+      sentient: false,
+      life: { article: "", events: [] },
       components: {
         tank: { tanks, maxTanks: { ...maxTanks }, coreParticle: reactor.coreParticle },
-        combat: { power: reactor.basePower(1) },
         cultivation: { realm: 1 },
+        combat: { power: reactor.basePower(1) },
         brain: { id: "weed_brain" },
       },
     });

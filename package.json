@@ -10,6 +10,7 @@
     "build": "npm run build --workspaces",
     "dev:core": "npm run dev -w @jindan/core",
     "dev:cli": "npm run dev -w @jindan/cli",
+    "dev:agent": "npm run dev -w @jindan/agent",
     "test": "npm test --workspaces --if-present",
     "lint": "biome lint packages/",
     "fmt": "biome format --write packages/",

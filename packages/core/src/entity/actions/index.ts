@@ -11,6 +11,7 @@
 
 import type { SpeciesType } from "../types.js";
 import { BREAKTHROUGH } from "./breakthrough.js";
+import { CHAT } from "./chat.js";
 import { DEVOUR } from "./devour.js";
 import { MEDITATE } from "./meditate.js";
 import { MOONLIGHT } from "./moonlight.js";
@@ -19,7 +20,15 @@ import { REST } from "./rest.js";
 import type { ActionDef, ActionHandler, ActionId } from "./types.js";
 
 /** All registered actions */
-const ALL_ACTIONS: ActionDef[] = [MEDITATE, MOONLIGHT, PHOTOSYNTH, DEVOUR, BREAKTHROUGH, REST];
+const ALL_ACTIONS: ActionDef[] = [
+  MEDITATE,
+  MOONLIGHT,
+  PHOTOSYNTH,
+  DEVOUR,
+  BREAKTHROUGH,
+  REST,
+  CHAT,
+];
 
 const byId = new Map<string, ActionDef>(ALL_ACTIONS.map((a) => [a.id, a]));
 const handlers = new Map<string, ActionHandler>();
@@ -73,6 +82,7 @@ export const ActionRegistry = {
 } as const;
 
 export { BREAKTHROUGH } from "./breakthrough.js";
+export { CHAT } from "./chat.js";
 export { DEVOUR } from "./devour.js";
 export { MEDITATE } from "./meditate.js";
 export { MOONLIGHT } from "./moonlight.js";

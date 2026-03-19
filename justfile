@@ -8,6 +8,10 @@ start:
 cli +args:
     npm exec -w @jindan/cli -- tsx src/index.ts {{args}}
 
+# 启动自动 AI 代理，例如：just start_agent --name "Bot"
+start_agent +args="":
+    npm exec -w @jindan/agent -- tsx src/index.ts {{args}}
+
 # 全量代码静态检查 (Biome) 与类型检查 (TSC)
 check:
     npm run check

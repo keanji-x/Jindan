@@ -54,7 +54,7 @@ export class LedgerGraph {
   }
 
   /** 获取实体相关的最近 N 条事件 (合并施动+受动，按 tick 降序) */
-  getRecentForEntity(entityId: string, limit = 5): LedgerEvent[] {
+  getRecentForEntity(entityId: string, limit = 20): LedgerEvent[] {
     const initiated = this.bySource.get(entityId) || [];
     const received = this.byTarget.get(entityId) || [];
 

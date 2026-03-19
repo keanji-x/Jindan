@@ -13,6 +13,7 @@ const state = {
   connected: false,
   ambientPool: { pools: { ql: 0, qs: 0 }, total: 0 },
   entities: [],
+  graveyard: [],
   logs: [],
   focusedEntityId: null,
   activeTab: "global", // 'global' or 'personal'
@@ -49,6 +50,9 @@ const DOM = {
   focusQiPercent: document.getElementById("focus-qi-percent"),
   focusPower: document.getElementById("focus-power"),
   focusRealm: document.getElementById("focus-realm"),
+
+  // Graveyard
+  graveyardList: document.getElementById("graveyard-list"),
 
   // Logs
   logGlobal: document.getElementById("log-global"),
@@ -173,9 +177,11 @@ function render() {
   // Global Stats
   DOM.glbTick.textContent = state.tick;
 
-  const popTotal = state.entities.filter((e) => e.alive).length;
+  const aliveEntities = state.entities.filter((e) => e.status === "alive");
+  const sentientAlive = aliveEntities.filter((e) => e.sentient).length;
+  const wildCreatures = aliveEntities.filter((e) => !e.sentient).length;
   const domTotal = document.getElementById("glb-pop-total");
-  if (domTotal) domTotal.textContent = popTotal;
+  if (domTotal) domTotal.textContent = `${sentientAlive} 灵 / ${wildCreatures} 兽`;
 
   // Qi Rendering
   const ambientQiInfo = state.ambientPool.pools.ql || 0;
@@ -185,7 +191,7 @@ function render() {
   let entityQiTotal = 0;
   if (state.entities) {
     for (const e of state.entities) {
-      if (e.alive && e.components) {
+      if (e.status === "alive" && e.components) {
         if (e.components.tank?.coreParticle && e.components.tank.tanks) {
           entityQiTotal += e.components.tank.tanks[e.components.tank.coreParticle] || 0;
         } else if (e.components.cultivation) {
@@ -242,6 +248,7 @@ function render() {
 
   renderLeaderboard();
   renderFocus();
+  fetchGraveyard();
 }
 
 function renderLeaderboard() {
@@ -250,9 +257,9 @@ function renderLeaderboard() {
     return;
   }
 
-  // Filter out any dead entities, sort by Realm, then Power
+  // Filter: only sentient (AI-played) alive entities for leaderboard
   const cultivators = state.entities
-    .filter((e) => e.alive)
+    .filter((e) => e.status === "alive" && e.sentient)
     .sort((a, b) => {
       const realmDiff = getRealm(b) - getRealm(a);
       return realmDiff !== 0 ? realmDiff : getPower(b) - getPower(a);
@@ -398,6 +405,53 @@ DOM.tabBtns.forEach((btn) => {
     else DOM.logPersonal.classList.add("active");
   });
 });
+
+// ── Graveyard ───────────────────────────────────────────
+
+function fetchGraveyard() {
+  fetch(`${API_URL}/graveyard`)
+    .then((r) => r.json())
+    .then((data) => {
+      if (Array.isArray(data)) {
+        state.graveyard = data;
+        renderGraveyard();
+      }
+    })
+    .catch(() => {});
+}
+
+function renderGraveyard() {
+  if (!DOM.graveyardList) return;
+
+  if (state.graveyard.length === 0) {
+    DOM.graveyardList.innerHTML =
+      '<div class="empty-state graveyard-empty">天地太平，尚无英灵长眠于此</div>';
+    return;
+  }
+
+  const speciesEmoji = { human: "🧔", beast: "🐗", plant: "🌿" };
+  const statusLabel = { lingering: "👻 游魂", entombed: "🪦 安息" };
+
+  let html = "";
+  for (const g of state.graveyard) {
+    const emoji = speciesEmoji[g.species] || "❓";
+    const badge = statusLabel[g.status] || g.status;
+    const epitaphText = g.epitaph ? g.epitaph.replace(/</g, "&lt;").replace(/>/g, "&gt;") : "";
+
+    html += `
+      <div class="tomb-card ${g.status}">
+        <div class="tomb-header">
+          <span class="tomb-name">${emoji} ${g.name}</span>
+          <span class="tomb-status-badge ${g.status}">${badge}</span>
+        </div>
+        <div class="tomb-species">${g.species}</div>
+        <div class="tomb-epitaph">${epitaphText}</div>
+      </div>
+    `;
+  }
+
+  DOM.graveyardList.innerHTML = html;
+}
 
 // ── Init ────────────────────────────────────────────────
 connect();

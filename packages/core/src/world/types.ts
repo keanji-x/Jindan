@@ -32,6 +32,9 @@ export type WorldEventType =
   | "entity_devoured"
   | "entity_breakthrough"
   | "entity_died"
+  | "entity_chat"
+  | "entity_tomb"
+  | "entity_reincarnated"
   | "tick_complete"
   | "system_warning"
   | "report";

@@ -92,17 +92,53 @@ async function main() {
         break;
       }
 
+      // ── 坟墓系统 (Tomb System) ────────────────────────────
+      case "status": {
+        const id = values.id ?? positionals[1];
+        if (!id) throw new Error("Usage: jindan status <id>");
+        const data = await api.getStatus(id);
+        toJSON(data);
+        break;
+      }
+
+      case "tomb": {
+        const id = values.id ?? positionals[1];
+        if (!id) throw new Error("Usage: jindan tomb <id>");
+        const data = await api.performTomb(id);
+        toJSON(data);
+        break;
+      }
+
+      case "reincarnate": {
+        const id = values.id ?? positionals[1];
+        const name = values.name ?? positionals[2];
+        const species = (values.species ?? positionals[3] ?? "human") as
+          | "human"
+          | "beast"
+          | "plant";
+        if (!id || !name)
+          throw new Error(
+            "Usage: jindan reincarnate <id> --name <Name> [--species human|beast|plant]",
+          );
+        const data = await api.reincarnate(id, name, species);
+        toJSON(data);
+        break;
+      }
+
       default: {
         console.log(`
 Jindan AI Agent CLI
 ===================
 Commands:
-  create    - Instantiate a new body:       jindan create --name <name> --species [human|beast|plant]
-  observe   - Perceive surrounding:         jindan observe <id>
-  memory    - Recall past interactions:     jindan memory <id>
-  plan      - List available actions:       jindan plan <id>
-  act       - Execute an action:            jindan act <id> <actionId> [targetId]
-  report    - Report internal thoughts:     jindan report <id> "<thoughts>"
+  create      - Instantiate a new body:       jindan create --name <name> --species [human|beast|plant]
+  observe     - Perceive surrounding:         jindan observe <id>
+  memory      - Recall past interactions:     jindan memory <id>
+  plan        - List available actions:       jindan plan <id>
+  act         - Execute an action:            jindan act <id> <actionId> [targetId]
+  report      - Report internal thoughts:     jindan report <id> "<thoughts>"
+  status      - Check life/death status:      jindan status <id>
+  tomb        - Perform tomb (lingering):     jindan tomb <id>
+  reincarnate - Reincarnate (entombed):       jindan reincarnate <id> --name <name> [--species human|beast|plant]
 
 Options:
   --host    - API endpoint (default: http://localhost:3001)
