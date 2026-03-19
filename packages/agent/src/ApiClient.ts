@@ -65,10 +65,11 @@ export class ApiClient {
     );
   }
 
-  performTomb(id: string) {
+  performTomb(id: string, epitaph?: string) {
     return this.request<{ success: boolean; epitaph?: string; error?: string }>(
       "POST",
       `/entity/${id}/tomb`,
+      epitaph ? { epitaph } : undefined,
     );
   }
 

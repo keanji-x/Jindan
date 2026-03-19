@@ -37,5 +37,5 @@ export const doChat: ActionHandler = (entity, _actionId, context) => {
     message: `${entityName} 向 ${targetName} 传音：「${messageStr}」`,
   });
 
-  return { success: true, messageSent: true, flux: 10 };
+  return { success: true, messageSent: true };
 };

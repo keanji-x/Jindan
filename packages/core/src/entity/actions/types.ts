@@ -23,7 +23,7 @@ export type ActionHandler = (
   entity: Entity,
   actionId: string,
   context: ActionContext,
-) => { success: boolean; flux?: number; [key: string]: unknown };
+) => { success: boolean; [key: string]: unknown };
 
 /** Action 唯一标识 */
 export type ActionId =

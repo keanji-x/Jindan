@@ -19,7 +19,6 @@ export interface AmbientPool {
 /** 世界状态 */
 export interface WorldState {
   tick: number;
-  qiFlux: number;
   ambientPool: AmbientPool;
   entities: Map<string, Entity>;
 }

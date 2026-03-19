@@ -108,7 +108,7 @@ export const doDevour: ActionHandler = (entity, _actionId, context) => {
   loser.status = "lingering";
 
   const actualGain = result.success ? Math.abs(result.deltas[winnerTank.coreParticle] ?? 0) : 0;
-  const flux = actionCost + result.flux;
+  const totalFlow = actionCost + result.totalFlow;
 
   events.emit({
     tick,
@@ -117,13 +117,13 @@ export const doDevour: ActionHandler = (entity, _actionId, context) => {
       winner: { id: winner.id, name: winner.name, species: winner.species },
       loser: { id: loser.id, name: loser.name, species: loser.species },
       qiGained: actualGain,
-      qiReturned: result.flux - actualGain,
+      qiReturned: result.totalFlow - actualGain,
       crossSpecies,
       winProb,
       equation: eqId,
     },
-    message: `⚔️「${winner.name}」吞噬了「${loser.name}」！夺取灵气 ${actualGain}（散溢 ${Math.floor(result.flux - actualGain)}）[${eq.name}]`,
+    message: `⚔️「${winner.name}」吞噬了「${loser.name}」！夺取灵气 ${actualGain}（散溢 ${Math.floor(result.totalFlow - actualGain)}）[${eq.name}]`,
   });
 
-  return { success: true, winner: winner.id, loser: loser.id, absorbed: actualGain, flux };
+  return { success: true, winner: winner.id, loser: loser.id, absorbed: actualGain };
 };

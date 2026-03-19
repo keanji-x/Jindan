@@ -62,9 +62,10 @@ const EPITAPH_PROMPT = `
 
 import { ChatLogger } from "./ChatLogger.js";
 
-async function loop(id: string) {
+async function loop(startId: string, name: string, species: string) {
+  let id = startId;
   console.log(`\n\n[AgentLoop] Starting loop for Agent ID: ${id}`);
-  const logger = new ChatLogger(id, path.resolve(__dirname, "../../logs"));
+  let logger = new ChatLogger(id, path.resolve(__dirname, "../../logs"));
   let cycle = 0;
 
   while (true) {
@@ -105,8 +106,8 @@ ${lifeStatus.life.article || "（无前世记忆，这是第一世）"}
           // Post the epitaph as a report first
           await api.postReport(id, `[墓志铭] ${epitaph}`).catch(() => {});
 
-          // Perform tomb
-          const tombResult = await api.performTomb(id);
+          // Perform tomb with the AI-generated epitaph
+          const tombResult = await api.performTomb(id, epitaph);
           if (tombResult.success) {
             console.log(`[AgentLoop] 🪦 Entity ${id} is now entombed. Epitaph recorded.`);
           } else {
@@ -117,9 +118,25 @@ ${lifeStatus.life.article || "（无前世记忆，这是第一世）"}
           await api.performTomb(id);
         }
 
-        // After tomb, the entity is entombed — exit
-        console.log(`[AgentLoop] Agent ${id} has been laid to rest. Exiting.`);
-        break;
+        // Reincarnate: create a new entity inheriting past life memories
+        console.log(`[AgentLoop] 🔄 Reincarnating ${id}...`);
+        try {
+          const reinResult = await api.reincarnate(id, name, species as "human" | "beast" | "plant");
+          if (reinResult.success && reinResult.entity) {
+            id = reinResult.entity.id;
+            logger = new ChatLogger(id, path.resolve(__dirname, "../../logs"));
+            cycle = 0;
+            console.log(`[AgentLoop] 🌱 Reincarnated as ${id}. Continuing loop...`);
+            await sleep(sleepMs);
+            continue;
+          } else {
+            console.error(`[AgentLoop] Reincarnation failed:`, reinResult.error);
+            break;
+          }
+        } catch (err) {
+          console.error(`[AgentLoop] Reincarnation error:`, err instanceof Error ? err.message : String(err));
+          break;
+        }
       }
 
       // ── 正常 OODA 循环 (存活状态) ───────────────────────
@@ -198,22 +215,23 @@ ${lifeStatus.life.article || "（无前世记忆，这是第一世）"}
 async function main() {
   try {
     let id = values.id || process.env.AGENT_ID;
+    const name = values.name ?? "无名";
+    const species = values.species ?? "human";
 
     if (!id) {
-      const name = values.name;
-      if (!name) {
+      if (!values.name) {
         throw new Error("You must provide either an --id or a --name to create a new character.");
       }
       
-      console.log(`[AgentInit] Creating new character: ${name} (${values.species})`);
-      const result = await api.createEntity(name, values.species as "human" | "beast" | "plant");
+      console.log(`[AgentInit] Creating new character: ${name} (${species})`);
+      const result = await api.createEntity(name, species as "human" | "beast" | "plant");
       id = result.id;
       console.log(`[AgentInit] Created successfully! ID: ${id}`);
     } else {
       console.log(`[AgentInit] Resuming character ID: ${id}`);
     }
 
-    await loop(id!);
+    await loop(id!, name, species);
   } catch (err) {
     console.error(`Fatal Error:`, err instanceof Error ? err.message : String(err));
     process.exit(1);
