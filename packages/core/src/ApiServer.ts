@@ -2,15 +2,16 @@
 // API Server — HTTP + WebSocket (delegates to World)
 // ============================================================
 
-import { readFile, appendFile, mkdir } from "node:fs/promises";
+import { appendFile, mkdir, readFile } from "node:fs/promises";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type WebSocket, WebSocketServer } from "ws";
+import { AiRegistry } from "./entity/ai/AiRegistry.js";
 import type { ActionId } from "./entity/types.js";
+import { attachFileLogger } from "./logger.js";
 import type { WorldEvent } from "./world/types.js";
 import { World } from "./world/World.js";
-import { attachFileLogger } from "./logger.js";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 
@@ -55,6 +56,31 @@ export class ApiServer {
       );
       ws.on("close", () => this.clients.delete(ws));
     });
+
+    // Actor System: 每个拥有 Brain 的 NPC 作为一个独立的 Actor，每秒行动一次
+    this.startNpcActorLoop();
+  }
+
+  private startNpcActorLoop() {
+    setInterval(() => {
+      const npcs = this.world.getAliveEntities().filter((e) => e.components.brain);
+      for (const npc of npcs) {
+        const brain = AiRegistry.get(npc.components.brain!.id);
+        if (brain) {
+          const actions = this.world.getAvailableActions(npc.id);
+          if (actions.length > 0) {
+            try {
+              const decision = brain.decide(actions);
+              if (decision) {
+                this.world.performAction(npc.id, decision.action, decision.targetId);
+              }
+            } catch (e) {
+              // 容错处理
+            }
+          }
+        }
+      }
+    }, 1000);
   }
 
   start(port = 3001): Promise<void> {

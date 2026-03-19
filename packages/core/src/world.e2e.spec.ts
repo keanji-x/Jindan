@@ -1,6 +1,6 @@
-import { expect, describe, it, vi } from "vitest";
-import { World } from "./world/World.js";
+import { describe, expect, it, vi } from "vitest";
 import { attachFileLogger } from "./logger.js";
+import { World } from "./world/World.js";
 
 describe("World E2E Simulation Harness", () => {
   it("should run the world autonomously for N ticks without crashing", () => {
@@ -40,7 +40,7 @@ describe("World E2E Simulation Harness", () => {
         const choice = valid[Math.floor(Math.random() * valid.length)]!;
         const res = world.performAction(actor.id, choice.action, choice.targetId);
         if (!res.success) {
-           // Might fail if not targetable during loop?
+          // Might fail if not targetable during loop?
         }
       } else {
         world.performAction(actor.id, "rest");

@@ -234,23 +234,7 @@ export class World {
     if ((ambient.pools.ql ?? 0) > maxCap) ambient.pools.ql = maxCap;
     if ((ambient.pools.sz ?? 0) > maxCap) ambient.pools.sz = maxCap;
 
-    // 3. 驱动后台 AI (原生行为树)
-    for (const entity of aliveEntities) {
-      const brainId = entity.components.brain?.id;
-      if (brainId && entity.alive) {
-        const brain = AiRegistry.get(brainId);
-        if (brain) {
-          try {
-            const decision = brain.decide(this.getAvailableActions(entity.id));
-            if (decision) {
-              this.performAction(entity.id, decision.action, decision.targetId);
-            }
-          } catch {
-            // ignore NPC errors
-          }
-        }
-      }
-    }
+    // 3. 后台 AI (原生行为树) 现已转为 Actor 模型，由外部 (如 ApiServer) 定时驱动，从而产生真实 Flux 推动本世界时钟。
 
     // 4. 底层大千生态自演化 (无常生灭)
     // 如果天地间灵植太少，天道自动孕育碧灵草维持生态底噪
