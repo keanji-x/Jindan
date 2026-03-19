@@ -85,24 +85,45 @@ export interface UniverseConfig {
   equations: Record<string, EquationDef>;
   /** All reactor (life-form) templates */
   reactors: Record<string, ReactorTemplate>;
-  /** Total particle count in the universe (conserved) */
+  /** Total particle count in the world (initial ambient qi pool) */
   totalParticles: number;
-  /** Ratio of particles initially in ambient vs in entities */
-  initialAmbientRatio: number;
-  /** Initial NPC counts */
-  initialBeasts: number;
-  initialPlants: number;
+  /** Real-time interval between ticks in milliseconds */
+  tickIntervalMs: number;
+  /** Maximum events retained in the LedgerGraph forgetting window */
+  ledgerWindowSize: number;
   /** Breakthrough parameters */
   breakthrough: {
     qiCostPerRealm: number;
+    minQiRatio: number;
     baseSuccessRate: number;
     maxSuccessRate: number;
     failLossRatio: number;
   };
+  /** Drain exponential base: drain = baseDrain × drainBase^(realm-1) */
+  drainBase: number;
+  /** QS infiltration exp factor: infiltration = baseDrain × (exp(k × qs_ratio × density) - 1) */
+  infiltrationK: number;
+  /** QL dissipation exp factor: dissipation = baseDrain × (exp(k × (1 - density)) - 1) */
+  dissipationK: number;
   /** Absorb parameters per action */
   absorb: Record<string, { base: number; perRealm: number }>;
   /** Devour combat sigmoid scaling factor */
   devourPowerScaling: number;
   /** Passive drain formula */
   drainFormula: (baseDrain: number, totalParticles: number, ambientCore: number) => number;
+  /** Ecology auto-regulation parameters */
+  ecology: {
+    /** Base ambient pool capacity (without entities) */
+    baseAmbientCap: number;
+    /** Extra ambient cap per alive human */
+    ambientCapPerHuman: number;
+    /** Extra ambient cap per alive beast */
+    ambientCapPerBeast: number;
+    /** Extra ambient cap per alive plant */
+    ambientCapPerPlant: number;
+    /** SpawnPool: base chance per tick for entity generation */
+    spawnBaseChance: number;
+    /** SpawnPool: max entities in world (controls emptiness factor) */
+    maxEntities: number;
+  };
 }

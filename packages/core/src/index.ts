@@ -18,6 +18,5 @@ export {
   BREAKTHROUGH_CONFIG,
   DEVOUR_CONFIG,
   QI_CONFIG,
-  WORLD_CONFIG,
   World,
 } from "./world/index.js";

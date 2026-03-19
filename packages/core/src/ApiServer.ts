@@ -7,6 +7,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type WebSocket, WebSocketServer } from "ws";
+import { UNIVERSE } from "./engine/index.js";
 import { AiRegistry } from "./entity/ai/AiRegistry.js";
 import type { ActionId } from "./entity/types.js";
 import { attachFileLogger } from "./logger.js";
@@ -70,7 +71,10 @@ export class ApiServer {
           const actions = this.world.getAvailableActions(npc.id);
           if (actions.length > 0) {
             try {
-              const decision = brain.decide(actions);
+              const tank = npc.components.tank;
+              const core = tank?.coreParticle ?? "ql";
+              const qiRatio = tank ? (tank.tanks[core] ?? 0) / (tank.maxTanks[core] ?? 1) : 0;
+              const decision = brain.decide(actions, { qiRatio });
               if (decision) {
                 this.world.performAction(npc.id, decision.action, decision.targetId);
               }
@@ -80,7 +84,10 @@ export class ApiServer {
           }
         }
       }
-    }, 1000);
+
+      // 天道推演：强制推进一轮时间，触发实体化生 (SpawnPool) 等逻辑
+      this.world.settle();
+    }, UNIVERSE.tickIntervalMs);
   }
 
   start(port = 3001): Promise<void> {

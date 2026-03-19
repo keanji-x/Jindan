@@ -57,6 +57,18 @@ export const doAbsorb: ActionHandler = (entity, actionId, context) => {
   const coreCurrent = tankComp.tanks[core] ?? 0;
   const coreMaxVal = tankComp.maxTanks[core] ?? 1;
 
+  // Smart feedback: warn when ambient qi is scarce
+  const ambientCap = UNIVERSE.ecology.baseAmbientCap || 200;
+  if (available <= maxAbsorb * 0.3) {
+    const density = Math.floor((available / ambientCap) * 100);
+    events.emit({
+      tick,
+      type: "system_warning",
+      data: { id: entity.id, particle: core, available, density },
+      message: `⚠️ 天地${core === "ql" ? "灵" : "煞"}气稀薄（密度 ${density}%），「${entity.name}」仅吸收 ${absorbed}。建议等待灵植繁荣或吞噬补充。`,
+    });
+  }
+
   events.emit({
     tick,
     type: "entity_absorbed",

@@ -8,13 +8,13 @@ export class QiPoolManager {
     const pools: Record<string, number> = {};
     for (const p of particles) pools[p.id] = 0;
 
-    // The universe starts barren with a base capacity, e.g. 100 ql, 10 sz
+    // The universe starts barren with a base capacity: ql (L-type) and qs (S-type)
     if (particles.find((p) => p.id === "ql")) pools.ql = baseCapacity;
-    if (particles.find((p) => p.id === "sz")) pools.sz = Math.floor(baseCapacity * 0.1);
+    if (particles.find((p) => p.id === "qs")) pools.qs = Math.floor(baseCapacity * 0.1);
 
     this.state = {
       pools,
-      total: baseCapacity * 1.1, // Now total is just a tracked snapshot value or kept for legacy
+      total: baseCapacity + Math.floor(baseCapacity * 0.1),
     };
   }
 

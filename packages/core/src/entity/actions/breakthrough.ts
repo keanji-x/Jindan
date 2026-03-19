@@ -7,6 +7,6 @@ export const BREAKTHROUGH: ActionDef = {
   cliCommand: "breakthrough",
   cliHelp: "✨ 突破 (冲击更高境界)",
   qiCost: 30,
-  species: ["human", "beast"],
+  species: ["human", "beast", "plant"],
   needsTarget: false,
 };

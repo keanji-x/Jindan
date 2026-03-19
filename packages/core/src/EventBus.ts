@@ -9,6 +9,7 @@ export type EventHandler = (event: WorldEvent) => void;
 export class EventBus {
   private handlers = new Map<string, Set<EventHandler>>();
   private globalHandlers = new Set<EventHandler>();
+  private _nextIndex = 1;
 
   /** Subscribe to a specific event type */
   on(type: string, handler: EventHandler): () => void {
@@ -25,22 +26,27 @@ export class EventBus {
     return () => this.globalHandlers.delete(handler);
   }
 
-  /** Emit an event */
-  emit(event: WorldEvent): void {
-    const typeHandlers = this.handlers.get(event.type);
+  /** Emit an event (auto-populates global index) */
+  emit(event: Omit<WorldEvent, "index">): WorldEvent {
+    const fullEvent = { ...event, index: this._nextIndex++ } as WorldEvent;
+
+    const typeHandlers = this.handlers.get(fullEvent.type);
     if (typeHandlers) {
       for (const handler of typeHandlers) {
-        handler(event);
+        handler(fullEvent);
       }
     }
     for (const handler of this.globalHandlers) {
-      handler(event);
+      handler(fullEvent);
     }
+
+    return fullEvent;
   }
 
-  /** Remove all handlers */
+  /** Remove all handlers and reset index */
   clear(): void {
     this.handlers.clear();
     this.globalHandlers.clear();
+    this._nextIndex = 1;
   }
 }

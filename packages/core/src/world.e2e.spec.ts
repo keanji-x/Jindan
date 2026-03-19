@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { attachFileLogger } from "./logger.js";
 import { World } from "./world/World.js";
 
@@ -20,8 +20,7 @@ describe("World E2E Simulation Harness", () => {
     let iterations = 0;
 
     // Fast-forward simulation synchronously
-    // Because setTimeout is used in processNextTick, we'll use vi.useFakeTimers
-    vi.useFakeTimers();
+    // We rely on world.settle() to advance the simulation state.
 
     while (world.tick < TARGET_TICKS && iterations < MAX_ITERATIONS) {
       iterations++;
@@ -46,11 +45,9 @@ describe("World E2E Simulation Harness", () => {
         world.performAction(actor.id, "rest");
       }
 
-      // Fast-forward timers to flush tick triggers
-      vi.runAllTimers();
+      // Settle the world to advance a tick
+      world.settle();
     }
-
-    vi.useRealTimers();
 
     // Proves flux generates ticks
     expect(world.tick).toBeGreaterThan(0);

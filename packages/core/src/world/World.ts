@@ -6,36 +6,32 @@
 // ============================================================
 
 import { EventBus } from "../EventBus.js";
+import { BALANCE } from "../engine/balance.config.js";
 import { UNIVERSE } from "../engine/index.js";
+import { applyParams } from "../engine/TunableParams.js";
 import { ActionRegistry } from "../entity/actions/index.js";
 import type { ActionContext, ActionId } from "../entity/actions/types.js";
-import { createEntity, spawnBeasts, spawnPlants } from "../entity/factory.js";
+import { createEntity } from "../entity/factory.js";
 import { SPECIES } from "../entity/index.js";
 import type { Entity, SpeciesType } from "../entity/types.js";
 import { type LedgerEventType, WorldLedger } from "../ledger/index.js";
 import { doAbsorb } from "./AbsorbSystem.js";
 import { doBreakthrough } from "./BreakthroughSystem.js";
-import { WORLD_CONFIG } from "./config.js";
 import { doDevour } from "./DevourSystem.js";
 import { drainAll } from "./qi/index.js";
+import { runSpawnPool } from "./qi/SpawnPool.js";
 import type { ActionResult, AvailableAction, WorldEvent } from "./types.js";
 
 export class World {
   readonly events = new EventBus();
   public readonly ledger: WorldLedger;
-  private qiFlux: number = 0;
   private _tick: number = 0;
 
   constructor() {
-    this.ledger = new WorldLedger();
+    // Apply SA-optimized balance params
+    applyParams(BALANCE);
 
-    // Spawn NPCs
-    for (const b of spawnBeasts(WORLD_CONFIG.initialBeastCount, this.ledger.qiPool.state)) {
-      this.ledger.setEntity(b);
-    }
-    for (const p of spawnPlants(WORLD_CONFIG.initialPlantCount, this.ledger.qiPool.state)) {
-      this.ledger.setEntity(p);
-    }
+    this.ledger = new WorldLedger();
     this.registerHandlers();
 
     // Ledger intercepter: convert WorldEvents into LedgerEvents
@@ -44,8 +40,10 @@ export class World {
       let sourceId = "WORLD";
       let targetId: string | undefined;
 
+      // Extract entity IDs from various event data shapes
       if (event.data.entity) sourceId = (event.data.entity as { id: string }).id;
       else if (event.data.winner) sourceId = (event.data.winner as { id: string }).id;
+      else if (typeof event.data.id === "string") sourceId = event.data.id;
 
       if (event.data.loser) targetId = (event.data.loser as { id: string }).id;
       else if (event.data.target) targetId = (event.data.target as { id: string }).id;
@@ -168,18 +166,14 @@ export class World {
 
       const result = handler(entity, action, ctx);
 
-      // Flux-based tick advancement
-      if (result.success && typeof result.flux === "number") {
-        this.accumulateFlux(result.flux);
-      } else if (result.success && action === "rest") {
-        this.accumulateFlux(ctx.actionCost);
-      }
+      // Flux kept for display/lore but no longer drives ticks
 
       return {
         success: true,
         tick: this._tick,
         result,
         events: tickEvents,
+        recentEvents: this.ledger.graph.getRecentForEntity(entityId),
         availableActions: entity.alive ? this.getAvailableActions(entityId) : [],
       };
     } finally {
@@ -188,30 +182,13 @@ export class World {
   }
 
   // ── Tick Engine ──────────────────────────────────────────
+  // settle() advances one tick. Callers inject this on their schedule:
+  //   - ApiServer: setInterval(() => world.settle(), 1000)
+  //   - Tests:     world.settle() called directly (deterministic)
 
-  private tickPending: boolean = false;
-
-  private accumulateFlux(amount: number) {
-    this.qiFlux += amount;
-    const threshold = UNIVERSE.totalParticles * 0.01; // 1%
-    if (this.qiFlux >= threshold && !this.tickPending) {
-      this.tickPending = true;
-      setTimeout(() => this.processNextTick(), 0);
-    }
-  }
-
-  private processNextTick() {
-    const threshold = UNIVERSE.totalParticles * 0.01;
-    if (this.qiFlux >= threshold) {
-      this.qiFlux -= threshold;
-      this.advanceTick();
-    }
-
-    if (this.qiFlux >= threshold) {
-      setTimeout(() => this.processNextTick(), 0);
-    } else {
-      this.tickPending = false;
-    }
+  /** 结算一轮天道运转 — 推进一个 tick */
+  settle(): void {
+    this.advanceTick();
   }
 
   private advanceTick(): void {
@@ -222,29 +199,22 @@ export class World {
     drainAll(aliveEntities, this.ledger.qiPool.state, this._tick, this.events);
 
     // 2. 动态容量结算与虚空放逐 (防刷核心机制)
-    // 基础天花板 100，每一个活着的生灵提供 100~200 的容量加持
-    let maxCap = 100;
+    const eco = UNIVERSE.ecology;
+    let maxCap = eco.baseAmbientCap;
     for (const e of aliveEntities) {
-      if (e.species === "human") maxCap += 200;
-      else if (e.species === "beast") maxCap += 150;
-      else if (e.species === "plant") maxCap += 100;
+      if (e.species === "human") maxCap += eco.ambientCapPerHuman;
+      else if (e.species === "beast") maxCap += eco.ambientCapPerBeast;
+      else if (e.species === "plant") maxCap += eco.ambientCapPerPlant;
     }
     const ambient = this.ledger.qiPool.state;
     if ((ambient.pools.ql ?? 0) > maxCap) ambient.pools.ql = maxCap;
-    if ((ambient.pools.sz ?? 0) > maxCap) ambient.pools.sz = maxCap;
+    if ((ambient.pools.qs ?? 0) > maxCap) ambient.pools.qs = maxCap;
 
     // 3. 后台 AI (原生行为树) 现已转为 Actor 模型，由外部 (如 ApiServer) 定时驱动，从而产生真实 Flux 推动本世界时钟。
 
-    // 4. 底层大千生态自演化 (无常生灭)
-    // 如果天地间灵植太少，天道自动孕育碧灵草维持生态底噪
-    const plants = aliveEntities.filter((e) => e.species === "plant");
-    if (plants.length < 5 && Math.random() < 0.2) {
-      for (const p of spawnPlants(1, ambient)) this.ledger.setEntity(p);
-    }
-    // 如果环境极度恶化 (煞气爆表)，天道降下噬煞蝇
-    if ((ambient.pools.sz ?? 0) > (ambient.pools.ql ?? 0) * 1.5 && Math.random() < 0.3) {
-      for (const b of spawnBeasts(1, ambient)) this.ledger.setEntity(b);
-    }
+    // 4. 化生池：天地灵蕴自发凝聚为新生命
+    const { spawned } = runSpawnPool(ambient, aliveEntities, this.events, this._tick);
+    for (const e of spawned) this.ledger.setEntity(e);
 
     this.events.emit({
       tick: this._tick,
@@ -287,7 +257,14 @@ export class World {
       }
 
       if (def.needsTarget) {
-        for (const t of aliveTargets) {
+        // NPC (has brain) should not auto-target players (no brain) for devour
+        const isNpc = !!entity.components.brain;
+        const targets =
+          isNpc && def.id === "devour"
+            ? aliveTargets.filter((t) => !!t.components.brain)
+            : aliveTargets;
+
+        for (const t of targets) {
           allOptions.push({
             action: def.id as ActionId,
             targetId: t.id,
@@ -324,7 +301,7 @@ export class World {
     const tankComp = entity.components.tank;
     if (!tankComp) return { ok: false, reason: "无粒子储罐" };
     const core = tankComp.coreParticle;
-    if ((tankComp.tanks[core] ?? 0) <= def.qiCost) return { ok: false, reason: "灵气不足" };
+    if ((tankComp.tanks[core] ?? 0) < def.qiCost) return { ok: false, reason: "灵气不足" };
 
     if (
       def.id === "devour" &&
@@ -336,18 +313,24 @@ export class World {
     if (def.id === "breakthrough") {
       const cultComp = entity.components.cultivation;
       if (!cultComp) return { ok: false, reason: "没有修为系统" };
+      const bt = UNIVERSE.breakthrough;
       const coreRatio = (tankComp.tanks[core] ?? 0) / (tankComp.maxTanks[core] ?? 1);
-      if (coreRatio < 0.9) return { ok: false, reason: "灵气未臻圆满" };
+      if (coreRatio < bt.minQiRatio) return { ok: false, reason: "灵气未臻圆满" };
       if (cultComp.realm >= 10) return { ok: false, reason: "已是最高境界" };
     }
     return { ok: true };
   }
 
-  private fail<T = unknown>(error: string, events: WorldEvent[]): ActionResult<T> {
+  private fail<T = unknown>(
+    error: string,
+    events: WorldEvent[],
+    entityId?: string,
+  ): ActionResult<T> {
     return {
       success: false,
       tick: this._tick,
       events,
+      recentEvents: entityId ? this.ledger.graph.getRecentForEntity(entityId) : [],
       availableActions: [],
       error,
     };

@@ -13,7 +13,7 @@ export interface ActionContext {
   actionCost: number;
   ambientPool: { pools: Record<ParticleId, number>; total: number };
   tick: number;
-  events: { emit: (event: WorldEvent) => void };
+  events: { emit: (event: Omit<WorldEvent, "index">) => void };
   target?: Entity;
 }
 
