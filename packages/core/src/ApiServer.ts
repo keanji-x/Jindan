@@ -2,7 +2,7 @@
 // API Server — HTTP + WebSocket (delegates to World)
 // ============================================================
 
-import { appendFile, mkdir, readFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -74,7 +74,7 @@ export class ApiServer {
               if (decision) {
                 this.world.performAction(npc.id, decision.action, decision.targetId);
               }
-            } catch (e) {
+            } catch (_e) {
               // 容错处理
             }
           }

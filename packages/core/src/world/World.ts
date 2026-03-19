@@ -9,7 +9,6 @@ import { EventBus } from "../EventBus.js";
 import { UNIVERSE } from "../engine/index.js";
 import { ActionRegistry } from "../entity/actions/index.js";
 import type { ActionContext, ActionId } from "../entity/actions/types.js";
-import { AiRegistry } from "../entity/ai/AiRegistry.js";
 import { createEntity, spawnBeasts, spawnPlants } from "../entity/factory.js";
 import { SPECIES } from "../entity/index.js";
 import type { Entity, SpeciesType } from "../entity/types.js";
