@@ -1,5 +1,5 @@
 // ============================================================
-// ApiClient — v2: HTTP client wrapping the unified action API
+// ApiClient — HTTP client wrapping the unified action API
 // ============================================================
 
 import type { ActionId } from "@jindan/core";
@@ -21,23 +21,13 @@ export class ApiClient {
     return data;
   }
 
-  // ── World ──────────────────────────────────────────────
-
-  getWorldStatus() {
-    return this.request<Record<string, unknown>>("GET", "/world/status");
-  }
-
   // ── Entity ─────────────────────────────────────────────
 
   createEntity(name: string, species: "human" | "beast" | "plant") {
-    return this.request<Record<string, unknown>>("POST", "/entity/create", {
+    return this.request<{ id: string } & Record<string, unknown>>("POST", "/entity/create", {
       name,
       species,
     });
-  }
-
-  getEntity(id: string) {
-    return this.request<Record<string, unknown>>("GET", `/entity/${id}`);
   }
 
   getObserve(id: string) {
@@ -69,27 +59,25 @@ export class ApiClient {
   // ── Tomb System ────────────────────────────────────────
 
   getStatus(id: string) {
-    return this.request<Record<string, unknown>>("GET", `/entity/${id}/status`);
+    return this.request<{ status: string; life: { article: string; events: string[] } }>(
+      "GET",
+      `/entity/${id}/status`,
+    );
   }
 
-  performTomb(id: string) {
-    return this.request<Record<string, unknown>>("POST", `/entity/${id}/tomb`);
+  performTomb(id: string, epitaph?: string) {
+    return this.request<{ success: boolean; epitaph?: string; error?: string }>(
+      "POST",
+      `/entity/${id}/tomb`,
+      epitaph ? { epitaph } : undefined,
+    );
   }
 
   reincarnate(id: string, name: string, species: "human" | "beast" | "plant") {
-    return this.request<Record<string, unknown>>("POST", `/entity/${id}/reincarnate`, {
-      name,
-      species,
-    });
-  }
-
-  // ── Query ──────────────────────────────────────────────
-
-  getEntities() {
-    return this.request<Record<string, unknown>[]>("GET", "/entities");
-  }
-
-  getLeaderboard() {
-    return this.request<Record<string, unknown>[]>("GET", "/leaderboard");
+    return this.request<{ success: boolean; entity?: { id: string }; error?: string }>(
+      "POST",
+      `/entity/${id}/reincarnate`,
+      { name, species },
+    );
   }
 }

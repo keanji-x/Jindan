@@ -12,7 +12,7 @@ import type { ActionHandler } from "../entity/actions/types.js";
 export const doDevour: ActionHandler = (entity, _actionId, context) => {
   const { actionCost, ambientPool, tick, events, target } = context;
   if (!target) return { success: false, reason: "必须指定要吞噬的目标" };
-  if (!target.alive) return { success: false, reason: "目标不存在或已消亡" };
+  if (target.status !== "alive") return { success: false, reason: "目标不存在或已消亡" };
 
   const attackerTank = entity.components.tank;
   const attackerCombat = entity.components.combat;
@@ -50,7 +50,7 @@ export const doDevour: ActionHandler = (entity, _actionId, context) => {
   const winnerTank = attackerWins ? attackerTank : targetTank;
   const loserTank = attackerWins ? targetTank : attackerTank;
 
-  const crossSpecies = entity.species !== target.species;
+  const crossSpecies = attackerTank.coreParticle !== targetTank.coreParticle;
   const winnerReactor = UNIVERSE.reactors[winner.species]!;
 
   // Select equation based on cross/same species
@@ -105,10 +105,10 @@ export const doDevour: ActionHandler = (entity, _actionId, context) => {
 
   // Loser dies: clear all tanks (particles already moved to winner)
   loserTank.tanks = Object.fromEntries(UNIVERSE.particles.map((p) => [p.id, 0]));
-  loser.alive = false;
+  loser.status = "lingering";
 
   const actualGain = result.success ? Math.abs(result.deltas[winnerTank.coreParticle] ?? 0) : 0;
-  const flux = actionCost + result.flux;
+  const totalFlow = actionCost + result.totalFlow;
 
   events.emit({
     tick,
@@ -117,13 +117,13 @@ export const doDevour: ActionHandler = (entity, _actionId, context) => {
       winner: { id: winner.id, name: winner.name, species: winner.species },
       loser: { id: loser.id, name: loser.name, species: loser.species },
       qiGained: actualGain,
-      qiReturned: result.flux - actualGain,
+      qiReturned: result.totalFlow - actualGain,
       crossSpecies,
       winProb,
       equation: eqId,
     },
-    message: `⚔️「${winner.name}」吞噬了「${loser.name}」！夺取灵气 ${actualGain}（散溢 ${Math.floor(result.flux - actualGain)}）[${eq.name}]`,
+    message: `⚔️「${winner.name}」吞噬了「${loser.name}」！夺取灵气 ${actualGain}（散溢 ${Math.floor(result.totalFlow - actualGain)}）[${eq.name}]`,
   });
 
-  return { success: true, winner: winner.id, loser: loser.id, absorbed: actualGain, flux };
+  return { success: true, winner: winner.id, loser: loser.id, absorbed: actualGain };
 };

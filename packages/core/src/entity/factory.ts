@@ -43,9 +43,12 @@ export function createEntity(name: string, species: SpeciesType, ambient: Ambien
 
   return {
     id: `${species[0]}_${nanoid(8)}`,
+    soulId: nanoid(10),
     name,
     species,
-    alive: true,
+    status: "alive",
+    sentient: true,
+    life: { article: "", events: [] },
     components: {
       tank: { tanks, maxTanks: { ...maxTanks }, coreParticle: reactor.coreParticle },
       cultivation: { realm },
@@ -76,9 +79,12 @@ export function spawnBeasts(count: number, ambient: AmbientPoolRef): Entity[] {
     const name = BEAST_NAMES[Math.floor(Math.random() * BEAST_NAMES.length)]!;
     entities.push({
       id: `b_${nanoid(8)}`,
+      soulId: nanoid(10),
       name: `${rank}阶${name}`,
       species: "beast",
-      alive: true,
+      status: "alive",
+      sentient: false,
+      life: { article: "", events: [] },
       components: {
         tank: { tanks, maxTanks: { ...maxTanks }, coreParticle: reactor.coreParticle },
         combat: { power: reactor.basePower(rank) + Math.floor(Math.random() * rank * 2) },
@@ -109,13 +115,16 @@ export function spawnPlants(count: number, ambient: AmbientPoolRef): Entity[] {
     const name = PLANT_NAMES[Math.floor(Math.random() * PLANT_NAMES.length)]!;
     entities.push({
       id: `p_${nanoid(8)}`,
+      soulId: nanoid(10),
       name,
       species: "plant",
-      alive: true,
+      status: "alive",
+      sentient: false,
+      life: { article: "", events: [] },
       components: {
         tank: { tanks, maxTanks: { ...maxTanks }, coreParticle: reactor.coreParticle },
-        combat: { power: reactor.basePower(1) },
         cultivation: { realm: 1 },
+        combat: { power: reactor.basePower(1) },
         brain: { id: "weed_brain" },
       },
     });

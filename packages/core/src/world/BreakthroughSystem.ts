@@ -50,7 +50,7 @@ export const doBreakthrough: ActionHandler = (entity, _actionId, context) => {
     const qiLoss = Math.floor((tankComp.tanks[core] ?? 0) * bt.failLossRatio);
     tankComp.tanks[core] = Math.max(0, (tankComp.tanks[core] ?? 0) - qiLoss);
     ambientPool.pools[core] = (ambientPool.pools[core] ?? 0) + qiLoss;
-    return { success: false, reason: "突破失败，真气逆流", flux: totalCost + qiLoss };
+    return { success: false, reason: "突破失败，真气逆流" };
   }
 
   // Success: phase transition (相变)
@@ -80,5 +80,5 @@ export const doBreakthrough: ActionHandler = (entity, _actionId, context) => {
     message: `✨「${entity.name}」突破成功！境界提升至 ${cultComp.realm} 阶，战力 ${power}`,
   });
 
-  return { success: true, newRealm: cultComp.realm, flux: totalCost };
+  return { success: true, newRealm: cultComp.realm };
 };

@@ -30,7 +30,7 @@ describe("World E2E Simulation Harness", () => {
         break; // Everyone died, but the engine didn't crash
       }
 
-      // Pick a random alive entity to drive the flux
+      // Pick a random alive entity to act
       const actor = allAlive[Math.floor(Math.random() * allAlive.length)]!;
       const actions = world.getAvailableActions(actor.id);
       const valid = actions.filter((a) => a.possible);
@@ -49,7 +49,7 @@ describe("World E2E Simulation Harness", () => {
       world.settle();
     }
 
-    // Proves flux generates ticks
+    // Proves time-based ticks advanced
     expect(world.tick).toBeGreaterThan(0);
     // Proves we didn't infinite loop without ticks
     expect(iterations).toBeLessThan(MAX_ITERATIONS);

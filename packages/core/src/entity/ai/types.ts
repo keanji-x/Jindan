@@ -1,15 +1,18 @@
 import type { AvailableAction } from "../../world/types.js";
 import type { ActionId } from "../actions/types.js";
 
-export interface BrainDecision {
-  action: ActionId;
-  targetId?: string;
-}
-
 /** Lightweight context passed to NPC brains for decision-making */
 export interface BrainContext {
   /** Core qi ratio: current / max (0..1) */
   qiRatio: number;
+  /** Notification: recent events affecting this entity */
+  recentEvents?: import("../../ledger/types.js").LedgerEvent[];
+}
+
+export interface BrainDecision {
+  action: ActionId;
+  targetId?: string;
+  payload?: unknown;
 }
 
 export interface AgentBrain {

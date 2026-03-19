@@ -44,7 +44,7 @@ export class WorldLedger {
   }
 
   getAliveEntities(): Entity[] {
-    return this.getAllEntities().filter((e) => e.alive);
+    return this.getAllEntities().filter((e) => e.status === "alive");
   }
 
   removeEntity(id: string) {

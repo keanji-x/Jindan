@@ -24,7 +24,7 @@ export interface LedgerEvent {
   sourceId: string; // 发起者ID，环境事件可用 "WORLD" 或 "SYSTEM"
   targetId?: string; // 受击者/目标ID
   type: LedgerEventType; // 事件类型/边类型
-  data?: Record<string, unknown>; // 事件附带的复式记账数据（如 qiCost, flux）
+  data?: Record<string, unknown>; // 事件附带的复式记账数据（如 qiCost, absorbed）
 }
 
 /** 供外部查询的实体历史视图 */

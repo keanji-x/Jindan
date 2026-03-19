@@ -47,7 +47,9 @@ export class ApiServer {
       for (const c of this.clients) if (c.readyState === 1) c.send(msg);
     });
 
-    this.wss.on("connection", (ws) => {
+    this.wss.on("connection", (ws, req) => {
+      const addr = req.socket.remoteAddress;
+      console.log(`[WS] Client connected from ${addr}, total=${this.clients.size + 1}`);
       this.clients.add(ws);
       ws.send(
         JSON.stringify({
@@ -55,7 +57,10 @@ export class ApiServer {
           data: this.world.getSnapshot(),
         }),
       );
-      ws.on("close", () => this.clients.delete(ws));
+      ws.on("close", () => {
+        this.clients.delete(ws);
+        console.log(`[WS] Client disconnected, total=${this.clients.size}`);
+      });
     });
 
     // Actor System: 每个拥有 Brain 的 NPC 作为一个独立的 Actor，每秒行动一次
@@ -74,9 +79,16 @@ export class ApiServer {
               const tank = npc.components.tank;
               const core = tank?.coreParticle ?? "ql";
               const qiRatio = tank ? (tank.tanks[core] ?? 0) / (tank.maxTanks[core] ?? 1) : 0;
-              const decision = brain.decide(actions, { qiRatio });
+              const recentEvents = this.world.ledger.graph.getRecentForEntity(npc.id);
+
+              const decision = brain.decide(actions, { qiRatio, recentEvents });
               if (decision) {
-                this.world.performAction(npc.id, decision.action, decision.targetId);
+                this.world.performAction(
+                  npc.id,
+                  decision.action,
+                  decision.targetId,
+                  decision.payload,
+                );
               }
             } catch (_e) {
               // 容错处理
@@ -147,6 +159,7 @@ export class ApiServer {
       const buf = await readFile(full);
       res.writeHead(200, {
         "Content-Type": MIME[extname(full)] ?? "application/octet-stream",
+        "Cache-Control": "no-cache",
       });
       res.end(buf);
     } catch {
@@ -191,6 +204,20 @@ export class ApiServer {
         });
         return { success: true, tick };
       }
+
+      if (parts[3] === "tomb") {
+        const epitaph = body.epitaph as string | undefined;
+        return this.world.performTomb(id, epitaph);
+      }
+
+      if (parts[3] === "reincarnate") {
+        const name = body.name as string;
+        const species = body.species as string;
+        if (!name) throw new ApiError("name is required");
+        if (!["human", "beast", "plant"].includes(species))
+          throw new ApiError("species must be human|beast|plant");
+        return this.world.reincarnate(id, name, species as "human" | "beast" | "plant");
+      }
     }
 
     if (method === "GET" && path.startsWith("/entity/")) {
@@ -222,17 +249,22 @@ export class ApiServer {
         return this.world.getAvailableActions(id);
       }
 
+      if (parts[3] === "status") {
+        return this.world.getLifeStatus(id);
+      }
+
       return e;
     }
 
     if (method === "POST" && path === "/action") {
-      const { entityId, action, targetId } = body as {
+      const { entityId, action, targetId, payload } = body as {
         entityId: string;
         action: ActionId;
         targetId?: string;
+        payload?: unknown;
       };
       if (!entityId || !action) throw new ApiError("entityId and action required");
-      return this.world.performAction(entityId, action, targetId);
+      return this.world.performAction(entityId, action, targetId, payload);
     }
 
     if (method === "GET" && path === "/leaderboard") {
@@ -262,6 +294,28 @@ export class ApiServer {
     }
 
     if (method === "GET" && path === "/entities") return this.world.getAliveEntities();
+
+    if (method === "GET" && path === "/graveyard") {
+      const dead = this.world.getDeadEntities();
+      // Group by soulId so past lives of the same soul are aggregated
+      const soulMap = new Map<string, typeof dead>();
+      for (const e of dead) {
+        const key = e.soulId;
+        if (!soulMap.has(key)) soulMap.set(key, []);
+        soulMap.get(key)!.push(e);
+      }
+      return Array.from(soulMap.entries()).map(([soulId, lives]) => ({
+        soulId,
+        name: lives[lives.length - 1]!.name, // latest incarnation name
+        lives: lives.map((e) => ({
+          id: e.id,
+          name: e.name,
+          species: e.species,
+          status: e.status,
+          epitaph: e.life.article,
+        })),
+      }));
+    }
 
     return undefined;
   }

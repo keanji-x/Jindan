@@ -15,6 +15,7 @@ export interface ActionContext {
   tick: number;
   events: { emit: (event: Omit<WorldEvent, "index">) => void };
   target?: Entity;
+  payload?: unknown;
 }
 
 /** 统一的 Action 执行器 */
@@ -22,10 +23,17 @@ export type ActionHandler = (
   entity: Entity,
   actionId: string,
   context: ActionContext,
-) => { success: boolean; flux?: number; [key: string]: unknown };
+) => { success: boolean; [key: string]: unknown };
 
 /** Action 唯一标识 */
-export type ActionId = "meditate" | "moonlight" | "photosynth" | "devour" | "breakthrough" | "rest";
+export type ActionId =
+  | "meditate"
+  | "moonlight"
+  | "photosynth"
+  | "devour"
+  | "breakthrough"
+  | "rest"
+  | "chat";
 
 /** 完整的 Action 定义 */
 export interface ActionDef {

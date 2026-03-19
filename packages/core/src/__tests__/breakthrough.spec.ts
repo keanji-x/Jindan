@@ -14,12 +14,14 @@ function makeHuman(qi: number, maxQi = 200, realm = 1): Entity {
     id: "test_human",
     name: "测试员",
     species: "human",
-    alive: true,
+    status: "alive" as const,
+    sentient: true,
+    life: { article: "", events: [] },
     components: {
       tank: {
         tanks: { ql: qi, qs: 0 },
         maxTanks: { ql: maxQi, qs: 0 },
-        coreParticle: "ql",
+        coreParticle: "ql" as const,
       },
       cultivation: { realm },
       combat: { power: 10 },

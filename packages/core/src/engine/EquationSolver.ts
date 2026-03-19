@@ -23,8 +23,8 @@ export interface SolveResult {
   reason?: string;
   /** Net change to each particle in the source store */
   deltas: Record<ParticleId, number>;
-  /** Total particle flux (sum of absolute deltas) — drives tick */
-  flux: number;
+  /** Total particle flow (sum of absolute deltas) — accounting metric */
+  totalFlow: number;
 }
 
 /**
@@ -57,7 +57,7 @@ export function solve(
       success: false,
       reason: `方程式不守恒: input=${totalIn} ≠ output=${totalOut}`,
       deltas: {},
-      flux: 0,
+      totalFlow: 0,
     };
   }
 
@@ -70,20 +70,20 @@ export function solve(
         success: false,
         reason: `粒子不足: 需要 ${needed} ${pid}，仅有 ${available}`,
         deltas: {},
-        flux: 0,
+        totalFlow: 0,
       };
     }
   }
 
   // ── 2. Execute: deduct inputs from source ──────────────────
   const deltas: Record<ParticleId, number> = {};
-  let flux = 0;
+  let totalFlow = 0;
 
   for (const [pid, amount] of Object.entries(eq.input)) {
     const qty = amount * scale;
     source.particles[pid] = (source.particles[pid] ?? 0) - qty;
     deltas[pid] = (deltas[pid] ?? 0) - qty;
-    flux += qty;
+    totalFlow += qty;
   }
 
   // ── 3. Distribute outputs ──────────────────────────────────
@@ -98,10 +98,10 @@ export function solve(
       ambient.particles[pid] = (ambient.particles[pid] ?? 0) + qty;
       deltas[pid] = (deltas[pid] ?? 0) + qty;
     }
-    flux += qty;
+    totalFlow += qty;
   }
 
-  return { success: true, deltas, flux };
+  return { success: true, deltas, totalFlow };
 }
 
 /**
@@ -122,7 +122,7 @@ export function solveDrain(
       success: false,
       reason: `方程式不守恒: input=${totalIn} ≠ output=${totalOut}`,
       deltas: {},
-      flux: 0,
+      totalFlow: 0,
     };
   }
 
@@ -139,14 +139,14 @@ export function solveDrain(
   }
 
   const deltas: Record<ParticleId, number> = {};
-  let flux = 0;
+  let totalFlow = 0;
 
   // Deduct inputs from source
   for (const [pid, amount] of Object.entries(eq.input)) {
     const qty = amount * scale;
     source.particles[pid] = (source.particles[pid] ?? 0) - qty;
     deltas[pid] = (deltas[pid] ?? 0) - qty;
-    flux += qty;
+    totalFlow += qty;
   }
 
   // ALL outputs to ambient (drain = pure loss)
@@ -154,10 +154,10 @@ export function solveDrain(
     const qty = amount * scale;
     ambient.particles[pid] = (ambient.particles[pid] ?? 0) + qty;
     deltas[pid] = (deltas[pid] ?? 0) + qty;
-    flux += qty;
+    totalFlow += qty;
   }
 
-  return { success: true, deltas, flux };
+  return { success: true, deltas, totalFlow };
 }
 
 /** Sum all values in a particle record */

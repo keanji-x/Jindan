@@ -58,7 +58,7 @@ describe("World E2E — Fluent Harness", () => {
 
       expect(human.name).toBe("张三");
       expect(human.species).toBe("human");
-      expect(human.alive).toBe(true);
+      expect(human.status).toBe("alive");
       expect(human.components.tank).toBeDefined();
       expect(human.components.cultivation).toBeDefined();
       expect(human.components.combat).toBeDefined();
@@ -112,7 +112,7 @@ describe("World E2E — Fluent Harness", () => {
       const updated = harness.world.getEntity(human.id)!;
       // After meditation: paid cost but absorbed more, net positive expected
       // (if ambient has enough qi)
-      expect(updated.alive).toBe(true);
+      expect(updated.status).toBe("alive");
     });
   });
 
@@ -243,7 +243,7 @@ describe("World E2E — Fluent Harness", () => {
       // Simple AI loop: observe, decide, act × N
       for (let i = 0; i < 10; i++) {
         const entity = harness.world.getEntity(ai.id);
-        if (!entity?.alive) break;
+        if (entity?.status !== "alive") break;
 
         const actions = harness.plan(ai.id);
         const possible = actions.filter((a) => a.possible);

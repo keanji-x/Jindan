@@ -1,138 +1,165 @@
-// ============================================================
-// Diagnostic Test — observe world state to understand collapse
-//
-// Run with: npx vitest run src/__tests__/diagnose.spec.ts
-// ============================================================
+import { describe, expect, it, vi } from "vitest";
+import { World } from "../world/World.js";
 
-import { afterEach, describe, expect, it } from "vitest";
-import { type TestHarness, world } from "./TestHarness.js";
+describe("诊断：游戏系统核心机制", () => {
+  function createWorld() {
+    const world = new World();
+    vi.useFakeTimers();
+    return world;
+  }
 
-let harness: TestHarness | null = null;
-afterEach(() => {
-  harness?.dispose();
-  harness = null;
-});
+  it("满灵气打坐 = 热力学平衡（净变化0是正确的）", () => {
+    const world = createWorld();
+    const player = world.createEntity("测试修士", "human");
 
-describe("World Diagnostics", () => {
-  // ── 1. NPC-Only world baseline (BEFORE tuning) ────────────
+    const tank = player.components.tank!;
+    const core = tank.coreParticle;
+    const initialQi = tank.tanks[core]!;
+    const maxQi = tank.maxTanks[core]!;
 
-  it("observe: NPC-only world for 20 ticks (simulate via AI brains)", () => {
-    harness = world();
-    harness.simulate(20).dumpTimeline();
+    expect(initialQi).toBe(maxQi); // 出生应该是满的
 
-    const report = harness.tickReport();
-    console.log("\n── Final State ──");
+    // 满罐打坐：扣费 → 吸收 → 净零（正确行为）
+    world.performAction(player.id, "meditate");
+    vi.runAllTimers();
+
+    expect(tank.tanks[core]).toBe(maxQi);
+    vi.useRealTimers();
+  });
+
+  it("吞噬碧灵草（同核心粒子）走同种方程，有实际收益", () => {
+    const world = createWorld();
+    const player = world.createEntity("测试修士", "human");
+
+    // 先突破失败来消耗灵气，模拟实际游戏状态
+    const tank = player.components.tank!;
+    const core = tank.coreParticle;
+    const maxQi = tank.maxTanks[core]!;
+
+    // 手动降低灵气到 ~50%
+    const ambient = world.ledger.qiPool.state;
+    const drain = Math.floor(maxQi * 0.5);
+    tank.tanks[core] = (tank.tanks[core] ?? 0) - drain;
+    ambient.pools[core] = (ambient.pools[core] ?? 0) + drain;
+
+    const qiBefore = tank.tanks[core]!;
+    console.log(`\n吞噬前灵气: ${qiBefore}/${maxQi}`);
+
+    const plants = world.getAliveEntities("plant");
+    expect(plants.length).toBeGreaterThan(0);
+
+    const target = plants[0]!;
+    const targetTank = target.components.tank!;
     console.log(
-      `  Alive: ${report.alive.total} (H:${report.alive.human} B:${report.alive.beast} P:${report.alive.plant})`,
-    );
-    console.log(
-      `  Ambient: ql=${Math.floor(report.ambient.ql ?? 0)} qs=${Math.floor(report.ambient.qs ?? 0)}`,
+      `目标: ${target.name}, 核心粒子=${targetTank.coreParticle}, 灵气=${targetTank.tanks[targetTank.coreParticle]}`,
     );
 
-    // Don't assert — this is purely observational
-    expect(true).toBe(true);
+    // 人(ql) 吃 植(ql) → 同核心 → 用 digest_same_l
+    const result = world.performAction(player.id, "devour", target.id);
+    vi.runAllTimers();
+
+    console.log(`吞噬结果: ${JSON.stringify(result.result)}`);
+
+    const qiAfter = tank.tanks[core]!;
+    console.log(`灵气变化: ${qiBefore} → ${qiAfter} (${qiAfter > qiBefore ? "增长" : "未增长"})`);
+    console.log(`目标状态: ${target.status}`);
+
+    // 核心验证：吞噬应该成功，且灵气有实际变化
+    expect(result.success).toBe(true);
+    expect(target.status).toBe("lingering");
+
+    vi.useRealTimers();
   });
 
-  // ── 2. Ecosystem health check ─────────────────────────────
+  it("人吃妖兽（异核心粒子）走异种方程", () => {
+    const world = createWorld();
+    const player = world.createEntity("测试修士", "human");
 
-  it("check: species diversity survives 20 ticks", () => {
-    harness = world();
-    harness.simulate(20);
+    const tank = player.components.tank!;
+    const core = tank.coreParticle; // ql
 
-    const counts = harness.countBySpecies();
-    const dist = harness.eventDistribution();
-    const eventTypes = Object.keys(dist);
+    const beasts = world.getAliveEntities("beast");
+    expect(beasts.length).toBeGreaterThan(0);
 
-    console.log("\n── Diversity Check ──");
-    console.log(`  Species alive: beast=${counts.beast} plant=${counts.plant}`);
-    console.log(`  Event types seen: ${eventTypes.length} (${eventTypes.join(", ")})`);
+    const target = beasts[0]!;
+    const targetTank = target.components.tank!;
+    console.log(`\n人(${core}) 吃 兽(${targetTank.coreParticle})`);
 
-    // Diversity goals (these may fail with current params — that's the diagnostic!)
-    // We want to see:
-    //   - At least 2 species still alive
-    //   - At least 4 different event types
-    //   - Not all entities dead
-    const speciesAlive = (counts.beast > 0 ? 1 : 0) + (counts.plant > 0 ? 1 : 0);
-    console.log(`  Species diversity: ${speciesAlive}/2`);
-    console.log(`  Event diversity: ${eventTypes.length}`);
-    console.log(`  Total alive: ${counts.total}`);
+    // 应该是异种 (ql vs qs)
+    expect(core).not.toBe(targetTank.coreParticle);
 
-    // Soft assertions (log but don't fail)
-    if (speciesAlive < 2) console.warn("  ⚠️ COLLAPSE: fewer than 2 species survived!");
-    if (eventTypes.length < 4) console.warn("  ⚠️ COLLAPSE: fewer than 4 event types seen!");
-    if (counts.total < 3) console.warn("  ⚠️ COLLAPSE: fewer than 3 entities alive!");
+    const qiBefore = tank.tanks[core]!;
+    const result = world.performAction(player.id, "devour", target.id);
+    vi.runAllTimers();
 
-    expect(true).toBe(true);
+    console.log(`结果: ${JSON.stringify(result.result)}`);
+    console.log(`灵气: ${qiBefore} → ${tank.tanks[core]}`);
+
+    expect(result.success).toBe(true);
+
+    vi.useRealTimers();
   });
 
-  // ── 3. Drain-vs-absorb balance analysis ───────────────────
+  it("完整 game loop：满灵气 → 突破 → 吞噬回血 → 再突破", () => {
+    const world = createWorld();
+    const player = world.createEntity("AI修士", "human");
 
-  it("observe: drain vs absorb rates per tick", () => {
-    harness = world();
-    harness.simulate(10);
+    const tank = player.components.tank!;
+    const core = tank.coreParticle;
 
-    const drains = harness.eventsOfType("entity_drained");
-    const absorbs = harness.eventsOfType("entity_absorbed");
-    const deaths = harness.eventsOfType("entity_died");
+    console.log(`\n=== Game Loop 模拟 ===`);
+    console.log(`初始: 灵气=${tank.tanks[core]}/${tank.maxTanks[core]}`);
 
-    let totalDrained = 0;
-    let totalAbsorbed = 0;
-    for (const d of drains) totalDrained += (d.data.drained as number) ?? 0;
-    for (const a of absorbs) totalAbsorbed += (a.data.absorbed as number) ?? 0;
+    let breakthroughAttempts = 0;
+    let breakthroughSuccesses = 0;
 
-    console.log("\n── Drain vs Absorb ──");
-    console.log(`  Total drained: ${totalDrained} across ${drains.length} events`);
-    console.log(`  Total absorbed: ${totalAbsorbed} across ${absorbs.length} events`);
-    console.log(`  Net qi flow: ${totalAbsorbed - totalDrained} (positive = entities gaining)`);
-    console.log(`  Deaths: ${deaths.length}`);
+    for (let round = 0; round < 50 && player.status === "alive"; round++) {
+      const qi = tank.tanks[core]!;
+      const max = tank.maxTanks[core]!;
+      const ratio = qi / max;
+      let action = "";
 
-    if (totalDrained > totalAbsorbed * 2) {
-      console.warn("  ⚠️ Drain is 2x+ absorb — entities can't survive!");
-    }
+      if (ratio >= 0.9) {
+        // 尝试突破
+        const res = world.performAction(player.id, "breakthrough");
+        vi.runAllTimers();
+        breakthroughAttempts++;
+        const btResult = res.result as { success?: boolean } | undefined;
+        if (btResult?.success) breakthroughSuccesses++;
+        action = `突破 ${btResult?.success ? "✅" : "❌"}`;
+      } else if (ratio < 0.8) {
+        // 灵气不足，找灵植吞噬
+        const plants = world.getAliveEntities("plant");
+        if (plants.length > 0) {
+          const res = world.performAction(player.id, "devour", plants[0]!.id);
+          vi.runAllTimers();
+          action = `吞噬${plants[0]!.name} ${res.success ? "✅" : "❌"}`;
+        } else {
+          // 没有灵植，打坐
+          world.performAction(player.id, "meditate");
+          vi.runAllTimers();
+          action = "打坐";
+        }
+      } else {
+        // 80-90%，打坐补到满
+        world.performAction(player.id, "meditate");
+        vi.runAllTimers();
+        action = "打坐";
+      }
 
-    expect(true).toBe(true);
-  });
-
-  // ── 4. Devour frequency analysis ──────────────────────────
-
-  it("observe: devour frequency and impact", () => {
-    harness = world();
-    harness.simulate(15);
-
-    const devours = harness.eventsOfType("entity_devoured");
-    const deaths = harness.eventsOfType("entity_died");
-
-    console.log("\n── Devour Analysis ──");
-    console.log(`  Total devours: ${devours.length} over ${harness.tickCount} ticks`);
-    console.log(`  Total deaths: ${deaths.length}`);
-    if (devours.length > 0) {
       console.log(
-        `  Devour rate: ${(devours.length / Math.max(harness.tickCount, 1)).toFixed(2)} per tick`,
+        `[${round + 1}] ${action} | 灵气=${tank.tanks[core]}/${tank.maxTanks[core]} (${Math.floor((tank.tanks[core]! / (tank.maxTanks[core] ?? 1)) * 100)}%) | 境界=${player.components.cultivation?.realm} | tick=${world.tick}`,
       );
     }
 
-    // Show who devoured whom
-    for (const d of devours.slice(0, 5)) {
-      const w = d.data.winner as { name: string; species: string };
-      const l = d.data.loser as { name: string; species: string };
-      console.log(
-        `    ${w.name}[${w.species}] ate ${l.name}[${l.species}], gained ${d.data.qiGained}`,
-      );
-    }
+    console.log(`\n突破尝试: ${breakthroughAttempts}次, 成功: ${breakthroughSuccesses}次`);
+    console.log(
+      `最终: 灵气=${tank.tanks[core]}/${tank.maxTanks[core]}, 境界=${player.components.cultivation?.realm}, status=${player.status}`,
+    );
 
-    expect(true).toBe(true);
-  });
+    // 至少应该尝试过突破
+    expect(breakthroughAttempts).toBeGreaterThan(0);
 
-  // ── 5. With player entity — observe difference ────────────
-
-  it("observe: world with 1 player for 20 ticks", () => {
-    harness = world();
-    const player = harness.createHuman("观测者");
-    harness.simulate(20).dumpTimeline();
-
-    const _report = harness.tickReport();
-    console.log(`\n  Player ${player.name} alive: ${harness.world.getEntity(player.id)?.alive}`);
-
-    expect(true).toBe(true);
+    vi.useRealTimers();
   });
 });

@@ -20,7 +20,7 @@ export function drainAll(
   const died: Entity[] = [];
 
   for (const entity of entities) {
-    if (!entity.alive) continue;
+    if (entity.status !== "alive") continue;
 
     const tankComp = entity.components.tank;
     if (!tankComp) continue;
@@ -134,7 +134,7 @@ function chainCollapse(
     }
   }
 
-  entity.alive = false;
+  entity.status = "lingering";
 
   events.emit({
     tick,

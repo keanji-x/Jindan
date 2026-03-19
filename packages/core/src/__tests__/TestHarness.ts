@@ -98,7 +98,7 @@ export class TestHarness {
 
       // Each alive entity does one random valid action
       for (const actor of alive) {
-        if (!actor.alive) continue;
+        if (actor.status !== "alive") continue;
         const actions = this.world.getAvailableActions(actor.id);
         const valid = actions.filter((a) => a.possible);
 
@@ -136,7 +136,7 @@ export class TestHarness {
       }
 
       for (const npc of npcs) {
-        if (!npc.alive) continue;
+        if (npc.status !== "alive") continue;
         const brain = AiRegistry.get(npc.components.brain!.id);
         if (!brain) continue;
 
@@ -218,7 +218,7 @@ export class TestHarness {
   /** Assert a specific entity is alive */
   assertAlive(entityId: string): Entity {
     const e = this.world.getEntity(entityId);
-    if (!e || !e.alive) {
+    if (!e || e.status !== "alive") {
       throw new Error(`Expected entity ${entityId} to be alive`);
     }
     return e;
@@ -227,7 +227,7 @@ export class TestHarness {
   /** Assert a specific entity is dead */
   assertDead(entityId: string): this {
     const e = this.world.getEntity(entityId);
-    if (e?.alive) {
+    if (e?.status === "alive") {
       throw new Error(`Expected entity ${entityId} to be dead, but it's alive`);
     }
     return this;

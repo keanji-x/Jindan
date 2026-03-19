@@ -34,7 +34,7 @@ describe("Player Survival", () => {
 
       const e = h.world.getEntity(pid);
       const qi = e?.components.tank?.tanks[e.components.tank.coreParticle] ?? 0;
-      const alive = e?.alive ?? false;
+      const alive = e?.status === "alive";
 
       console.log(
         `  --- iteration=${i}: tick ${tickBefore}→${tickAfter}, qi=${qi}, alive=${alive}`,

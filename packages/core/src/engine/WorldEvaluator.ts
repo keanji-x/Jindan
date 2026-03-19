@@ -70,7 +70,7 @@ export function evaluateWorld(opts: EvalOptions): WorldScore {
     const npcs = world.getAliveEntities().filter((e) => e.components.brain);
 
     for (const npc of npcs) {
-      if (!npc.alive) continue;
+      if (npc.status !== "alive") continue;
       const brain = AiRegistry.get(npc.components.brain!.id);
       if (!brain) continue;
 
@@ -88,7 +88,7 @@ export function evaluateWorld(opts: EvalOptions): WorldScore {
 
     // Player acts: meditate when available, breakthrough when possible
     const playerEntity = world.getEntity(playerId);
-    if (playerEntity?.alive) {
+    if (playerEntity?.status === "alive") {
       const pActions = world.getAvailableActions(playerId);
       const brk = pActions.find((a) => a.action === "breakthrough" && a.possible);
       if (brk) {

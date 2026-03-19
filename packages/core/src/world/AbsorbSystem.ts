@@ -18,7 +18,6 @@ export const doAbsorb: ActionHandler = (entity, actionId, context) => {
       success: false,
       reason: "实体缺少组件(Tank或Cultivation)",
       absorbed: 0,
-      flux: 0,
       actionCost: 0,
     };
   }
@@ -31,7 +30,6 @@ export const doAbsorb: ActionHandler = (entity, actionId, context) => {
       success: false,
       absorbed: 0,
       actionCost: 0,
-      flux: 0,
       reason: "灵气不足以执行此行动",
     };
   }
@@ -41,7 +39,7 @@ export const doAbsorb: ActionHandler = (entity, actionId, context) => {
   // Pull core particles from ambient
   const cfg = UNIVERSE.absorb[action];
   if (!cfg) {
-    return { success: false, reason: `未知吸收动作: ${action}`, absorbed: 0, flux: 0, actionCost };
+    return { success: false, reason: `未知吸收动作: ${action}`, absorbed: 0, actionCost };
   }
   const maxAbsorb = cfg.base + cfg.perRealm * cultComp.realm;
   const coreMax = tankComp.maxTanks[core] ?? 0;
@@ -52,7 +50,6 @@ export const doAbsorb: ActionHandler = (entity, actionId, context) => {
   ambientPool.pools[core] = (ambientPool.pools[core] ?? 0) - absorbed;
   tankComp.tanks[core] = (tankComp.tanks[core] ?? 0) + absorbed;
 
-  const flux = actionCost + absorbed;
 
   const coreCurrent = tankComp.tanks[core] ?? 0;
   const coreMaxVal = tankComp.maxTanks[core] ?? 1;
@@ -84,5 +81,5 @@ export const doAbsorb: ActionHandler = (entity, actionId, context) => {
     message: `「${entity.name}」${ActionRegistry.name(action)}，吸纳天地灵蕴 ${absorbed}，当前灵气饱满度 ${Math.floor((coreCurrent / coreMaxVal) * 100)}%`,
   });
 
-  return { success: true, absorbed, actionCost, flux };
+  return { success: true, absorbed, actionCost };
 };
