@@ -38,8 +38,7 @@ const DOM = {
   sliceLingQi: document.getElementById("slice-ling-qi"),
   sliceShaQi: document.getElementById("slice-sha-qi"),
 
-  glbPopCultivators: document.getElementById("glb-pop-cultivators"),
-  glbPopBeasts: document.getElementById("glb-pop-beasts"),
+  glbPopTotal: document.getElementById("glb-pop-total"),
   leaderboardList: document.getElementById("leaderboard-list"),
 
   // Focus View
@@ -174,10 +173,9 @@ function render() {
   // Global Stats
   DOM.glbTick.textContent = state.tick;
 
-  const popCult = state.entities.filter((e) => e.species === "human" && e.alive).length;
-  const popBeast = state.entities.filter((e) => e.species === "beast" && e.alive).length;
-  if (DOM.glbPopCultivators) DOM.glbPopCultivators.textContent = popCult;
-  if (DOM.glbPopBeasts) DOM.glbPopBeasts.textContent = popBeast;
+  const popTotal = state.entities.filter((e) => e.alive).length;
+  const domTotal = document.getElementById("glb-pop-total");
+  if (domTotal) domTotal.textContent = popTotal;
 
   // Qi Rendering
   const ambientQiInfo = state.ambientPool.pools.ql || 0;
@@ -252,9 +250,9 @@ function renderLeaderboard() {
     return;
   }
 
-  // Filter only humans for the leaderboard, sort by Realm, then Power
+  // Filter out any dead entities, sort by Realm, then Power
   const cultivators = state.entities
-    .filter((e) => e.species === "human")
+    .filter((e) => e.alive)
     .sort((a, b) => {
       const realmDiff = getRealm(b) - getRealm(a);
       return realmDiff !== 0 ? realmDiff : getPower(b) - getPower(a);
@@ -269,7 +267,7 @@ function renderLeaderboard() {
       <div class="leader-card ${rankClass} ${isFocused ? "focused" : ""}" data-id="${c.id}">
         <div class="l-name">
           <span class="rank-badge">${i + 1}</span>
-          ${c.name}
+          ${c.species === "plant" ? "🌿" : c.species === "beast" ? "🐗" : "🧔"} ${c.name}
         </div>
         <div class="l-realm">${getRealmName(getRealm(c))}</div>
         <div class="l-power">⚔️ ${formatNum(getPower(c))}</div>

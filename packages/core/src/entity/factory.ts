@@ -14,9 +14,9 @@ export interface AmbientPoolRef {
   pools: Record<ParticleId, number>;
 }
 
-const BEAST_NAMES = ["赤焰虎", "碧水蛟", "风翼鹰", "玄铁熊", "紫电狼", "幽冥蛇", "噬煞黑蝇"];
+const BEAST_NAMES = ["噬煞蝇", "变异黑蝇", "巨型噬煞蝇", "群居幼蝇", "煞气巡回蝇"];
 
-const PLANT_NAMES = ["碧灵草", "七星莲", "紫薇藤", "玄冰花", "黑莲"];
+const PLANT_NAMES = ["碧灵草", "矮壮碧灵草", "幽光碧灵草", "簇生碧草", "变异碧草"];
 
 /** 阴阳同界注入：出生物质的等量逆向反噬 */
 function applyYinYangBirth(coreParticle: ParticleId, amount: number, ambient: AmbientPoolRef) {

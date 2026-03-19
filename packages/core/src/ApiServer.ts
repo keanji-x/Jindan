@@ -2,7 +2,7 @@
 // API Server — HTTP + WebSocket (delegates to World)
 // ============================================================
 
-import { readFile } from "node:fs/promises";
+import { readFile, appendFile, mkdir } from "node:fs/promises";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -10,6 +10,7 @@ import { type WebSocket, WebSocketServer } from "ws";
 import type { ActionId } from "./entity/types.js";
 import type { WorldEvent } from "./world/types.js";
 import { World } from "./world/World.js";
+import { attachFileLogger } from "./logger.js";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 
@@ -36,6 +37,8 @@ export class ApiServer {
     this.world = world ?? new World();
     this.http = createServer(this.handle.bind(this));
     this.wss = new WebSocketServer({ server: this.http });
+
+    attachFileLogger(this.world);
 
     this.world.events.onAny((e: WorldEvent) => {
       const msg = JSON.stringify(e);
