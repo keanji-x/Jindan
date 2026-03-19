@@ -10,6 +10,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Noto+Serif+SC:wght@400;700&display=swap" rel="stylesheet">
 </head>
 <body>
+  <canvas id="particle-canvas"></canvas>
   <div id="app-container">
     <header class="glass-header">
       <div class="header-left">
@@ -33,31 +34,47 @@
            ============================================== -->
       <section id="top-board" class="dashboard-section">
         
-        <!-- Qi Distribution & Resources -->
-        <div class="glass-panel qi-pool-panel">
-          <h2 class="section-title">天地灵气池</h2>
+        <!-- Qi Distribution -->
+        <!-- Qi Distribution -->
+        <div class="glass-panel qi-pool-panel" style="grid-column: span 1;">
+          <h2 class="section-title">天地大千源气</h2>
           <div class="qi-visualizer">
-             <div class="qi-ring">
-               <svg viewBox="0 0 100 100" role="img" aria-labelledby="qi-ring-title">
-                 <title id="qi-ring-title">灵气容量光环</title>
-                 <circle class="ring-bg" cx="50" cy="50" r="45"></circle>
-                 <circle id="qi-ring-fill" class="ring-fill" cx="50" cy="50" r="45"></circle>
+             <!-- Legends Left -->
+             <div class="qi-legend left-legend">
+                <div class="legend-item"><span class="dot qi-dot"></span>游离灵气<br><strong id="val-ambient-qi" class="legend-val">0</strong></div>
+                <div class="legend-item"><span class="dot body-dot"></span>众生之气<br><strong id="val-entity-qi" class="legend-val">0</strong></div>
+                <div class="population-stats" style="margin-top: 0.5rem; font-size: 0.8rem; color: var(--text-secondary); text-align: right;">
+                  <div>修士: <b id="glb-pop-cultivators" style="color:var(--text-primary);">0</b></div>
+                  <div style="margin-top: 0.2rem;">妖兽: <b id="glb-pop-beasts" style="color:var(--text-primary);">0</b></div>
+                </div>
+             </div>
+
+             <!-- Concentric Rings (Pie Charts) -->
+             <div class="concentric-rings">
+               <svg viewBox="0 0 140 140" role="img" aria-labelledby="concentric-ring-title">
+                 <title id="concentric-ring-title">双极灵池光环</title>
+                 
+                 <!-- Outer Ring (Radius=55, C=345.57) -->
+                 <circle class="ring-bg" cx="70" cy="70" r="55"></circle>
+                 <circle id="slice-ambient-qi" class="ring-fill slice-ambient qi-fill" cx="70" cy="70" r="55" transform="rotate(-90 70 70)"></circle>
+                 <circle id="slice-entity-qi" class="ring-fill slice-body body-fill" cx="70" cy="70" r="55" transform="rotate(-90 70 70)"></circle>
+                 
+                 <!-- Inner Ring (Radius=38, C=238.76) -->
+                 <circle class="ring-bg" cx="70" cy="70" r="38"></circle>
+                 <circle id="slice-ling-qi" class="ring-fill slice-ling ling-fill" cx="70" cy="70" r="38" transform="rotate(-90 70 70)"></circle>
+                 <circle id="slice-sha-qi" class="ring-fill slice-sha sha-fill" cx="70" cy="70" r="38" transform="rotate(-90 70 70)"></circle>
                </svg>
+               <!-- Center Label (Total Qi) -->
                <div class="qi-ring-content">
-                 <div class="qi-ring-label">游离灵气</div>
-                 <div id="glb-ambient-qi" class="qi-ring-value">0</div>
+                 <div class="total-label">宇宙总气</div>
+                 <div id="val-total-qi" class="total-value">0</div>
                </div>
              </div>
              
-             <!-- Resource Breakdown -->
-             <div class="resource-breakdown">
-                <div class="resource-item">
-                  <div class="res-label">芸芸众生</div>
-                  <div class="population-stats">
-                    <span>修士: <b id="glb-pop-cultivators">0</b></span>
-                    <span>妖兽: <b id="glb-pop-beasts">0</b></span>
-                  </div>
-                </div>
+             <!-- Legends Right -->
+             <div class="qi-legend right-legend">
+                <div class="legend-item"><span class="dot ling-dot"></span>天地正气<br><strong id="val-ling-qi" class="legend-val">0</strong></div>
+                <div class="legend-item"><span class="dot sha-dot"></span>天地煞气<br><strong id="val-sha-qi" class="legend-val">0</strong></div>
              </div>
           </div>
         </div>

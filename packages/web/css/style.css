@@ -55,6 +55,17 @@ body {
   background-attachment: fixed;
 }
 
+#particle-canvas {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.8;
+}
+
 #app-container {
   display: flex;
   flex-direction: column;
@@ -62,6 +73,8 @@ body {
   max-width: 1400px;
   margin: 0 auto;
   overflow: hidden;
+  position: relative;
+  z-index: 1;
 }
 
 /* ── Header ────────────────────────────────────────────── */
@@ -268,41 +281,118 @@ main::-webkit-scrollbar-thumb {
 .qi-visualizer {
   display: flex;
   align-items: center;
-  gap: 2rem;
-  height: 100%;
+  justify-content: space-around;
+  flex: 1;
+  padding: 1rem 0;
 }
 
-.qi-ring {
+.qi-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+.left-legend {
+  align-items: flex-end;
+  text-align: right;
+}
+.right-legend {
+  align-items: flex-start;
+  text-align: left;
+}
+
+.legend-item {
+  position: relative;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+.legend-item .dot {
+  position: absolute;
+  top: 5px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.left-legend .dot {
+  right: -15px;
+}
+.right-legend .dot {
+  left: -15px;
+}
+
+.qi-dot {
+  background: var(--color-primary);
+  box-shadow: 0 0 5px var(--color-primary);
+}
+.body-dot {
+  background: #fbbf24;
+  box-shadow: 0 0 5px #fbbf24;
+}
+.ling-dot {
+  background: #34d399;
+  box-shadow: 0 0 5px #34d399;
+}
+.sha-dot {
+  background: var(--color-danger);
+  box-shadow: 0 0 5px var(--color-danger);
+}
+
+.legend-val {
+  font-family: var(--font-title);
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.concentric-rings {
   position: relative;
   width: 140px;
   height: 140px;
   flex-shrink: 0;
 }
 
-.qi-ring svg {
+.concentric-rings svg {
   width: 100%;
   height: 100%;
-  transform: rotate(-90deg);
+  overflow: visible;
 }
 
 .ring-bg {
   fill: none;
   stroke: rgba(255, 255, 255, 0.05);
-  stroke-width: 6;
+  stroke-width: 8;
 }
 
 .ring-fill {
   fill: none;
-  stroke: var(--color-qi);
-  stroke-width: 6;
-  stroke-linecap: round;
-  stroke-dasharray: 283; /* 2 * PI * 45 */
-  stroke-dashoffset: 283;
-  transition: stroke-dashoffset 1s ease-out;
-  filter: drop-shadow(0 0 5px var(--color-qi-glow));
+  stroke-width: 8;
+  /* stroke-dasharray and offset controlled by JS now */
+  transition:
+    stroke-dasharray 1s ease-out,
+    stroke-dashoffset 1s ease-out;
 }
 
-.qi-ring-content {
+.qi-fill {
+  stroke: var(--color-primary);
+  filter: drop-shadow(0 0 5px rgba(56, 189, 248, 0.4));
+}
+
+.body-fill {
+  stroke: #fbbf24;
+  filter: drop-shadow(0 0 5px rgba(251, 191, 36, 0.4));
+}
+
+.ling-fill {
+  stroke: #34d399;
+  filter: drop-shadow(0 0 5px rgba(52, 211, 153, 0.4));
+}
+
+.sha-fill {
+  stroke: var(--color-danger);
+  filter: drop-shadow(0 0 5px rgba(244, 63, 94, 0.4));
+}
+
+.concentric-rings .qi-ring-content {
   position: absolute;
   top: 0;
   left: 0;
@@ -310,23 +400,23 @@ main::-webkit-scrollbar-thumb {
   bottom: 0;
   display: flex;
   flex-direction: column;
-  align-items: center;
   justify-content: center;
+  align-items: center;
+  gap: 0.2rem;
 }
 
-.qi-ring-label {
-  font-size: 0.65rem;
+.total-label {
+  font-size: 0.7rem;
   color: var(--text-secondary);
-  text-transform: uppercase;
   letter-spacing: 1px;
 }
 
-.qi-ring-value {
+.total-value {
   font-family: var(--font-title);
   font-size: 1.4rem;
-  color: var(--color-qi);
   font-weight: 700;
-  text-shadow: var(--glow-qi);
+  color: #fff;
+  text-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
 }
 
 .resource-breakdown {

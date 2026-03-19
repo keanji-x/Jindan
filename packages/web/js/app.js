@@ -2,6 +2,8 @@
 // Frontend App — WebSocket client + State-driven DOM rendering
 // ============================================================
 
+import { ParticleSystem } from "./particles.js";
+
 const WS_URL = "ws://localhost:3001";
 const API_URL = "http://localhost:3001";
 const MAX_LOG_ENTRIES = 200;
@@ -16,6 +18,8 @@ const state = {
   activeTab: "global", // 'global' or 'personal'
 };
 
+let particles = null;
+
 // ── DOM Cache ───────────────────────────────────────────
 const DOM = {
   statusText: document.querySelector(".status-text"),
@@ -23,8 +27,17 @@ const DOM = {
 
   // Global View
   glbTick: document.getElementById("glb-tick"),
-  glbAmbientQi: document.getElementById("glb-ambient-qi"),
-  qiRingFill: document.getElementById("qi-ring-fill"),
+  valAmbientQi: document.getElementById("val-ambient-qi"),
+  valEntityQi: document.getElementById("val-entity-qi"),
+  valLingQi: document.getElementById("val-ling-qi"),
+  valShaQi: document.getElementById("val-sha-qi"),
+  valTotalQi: document.getElementById("val-total-qi"),
+
+  sliceAmbientQi: document.getElementById("slice-ambient-qi"),
+  sliceEntityQi: document.getElementById("slice-entity-qi"),
+  sliceLingQi: document.getElementById("slice-ling-qi"),
+  sliceShaQi: document.getElementById("slice-sha-qi"),
+
   glbPopCultivators: document.getElementById("glb-pop-cultivators"),
   glbPopBeasts: document.getElementById("glb-pop-beasts"),
   leaderboardList: document.getElementById("leaderboard-list"),
@@ -154,21 +167,80 @@ function getRealmName(realmNum) {
 // ── Render ──────────────────────────────────────────────
 
 function render() {
+  if (!particles) {
+    particles = new ParticleSystem("particle-canvas");
+  }
+
   // Global Stats
   DOM.glbTick.textContent = state.tick;
-  DOM.glbAmbientQi.textContent = formatNum(state.ambientPool.pools.ql || 0);
 
-  const popCult = state.entities.filter((e) => e.species === "human").length;
-  const popBeast = state.entities.filter((e) => e.species === "beast").length;
-  DOM.glbPopCultivators.textContent = popCult;
-  DOM.glbPopBeasts.textContent = popBeast;
+  const popCult = state.entities.filter((e) => e.species === "human" && e.alive).length;
+  const popBeast = state.entities.filter((e) => e.species === "beast" && e.alive).length;
+  if (DOM.glbPopCultivators) DOM.glbPopCultivators.textContent = popCult;
+  if (DOM.glbPopBeasts) DOM.glbPopBeasts.textContent = popBeast;
 
-  // Qi Ring Animation
-  const totalQiVal = state.ambientPool.total || 1;
-  const currQiVal = state.ambientPool.pools.ql || 0;
-  const p = Math.max(0, Math.min(1, currQiVal / totalQiVal));
-  const offset = 283 - 283 * p; // 283 is circumference
-  DOM.qiRingFill.style.strokeDashoffset = offset;
+  // Qi Rendering
+  const ambientQiInfo = state.ambientPool.pools.ql || 0;
+  const shaQiInfo = Math.abs(state.ambientPool.pools.qs || 0);
+
+  // Calculate Entity Qi
+  let entityQiTotal = 0;
+  if (state.entities) {
+    for (const e of state.entities) {
+      if (e.alive && e.components) {
+        if (e.components.tank?.coreParticle && e.components.tank.tanks) {
+          entityQiTotal += e.components.tank.tanks[e.components.tank.coreParticle] || 0;
+        } else if (e.components.cultivation) {
+          entityQiTotal += e.components.cultivation.currentQi || 0;
+        }
+      }
+    }
+  }
+
+  const outerTotal = ambientQiInfo + entityQiTotal || 1;
+  const lingQiInfo = ambientQiInfo + entityQiTotal;
+  const innerTotal = lingQiInfo + shaQiInfo || 1;
+  const universeTotal = outerTotal + shaQiInfo;
+
+  // Update Texts
+  if (DOM.valAmbientQi) DOM.valAmbientQi.textContent = formatNum(ambientQiInfo);
+  if (DOM.valEntityQi) DOM.valEntityQi.textContent = formatNum(entityQiTotal);
+  if (DOM.valLingQi) DOM.valLingQi.textContent = formatNum(lingQiInfo);
+  if (DOM.valShaQi) DOM.valShaQi.textContent = formatNum(shaQiInfo);
+  if (DOM.valTotalQi) DOM.valTotalQi.textContent = formatNum(universeTotal);
+
+  // Outer Ring (Radius=55, C=345.57)
+  const outerC = 345.57;
+  const ratioAmbient = Math.max(0, Math.min(1, ambientQiInfo / outerTotal));
+  const ratioEntity = Math.max(0, Math.min(1, entityQiTotal / outerTotal));
+
+  if (DOM.sliceAmbientQi) {
+    DOM.sliceAmbientQi.style.strokeDasharray = `${ratioAmbient * outerC} ${outerC}`;
+    DOM.sliceAmbientQi.style.strokeDashoffset = 0;
+  }
+  if (DOM.sliceEntityQi) {
+    DOM.sliceEntityQi.style.strokeDasharray = `${ratioEntity * outerC} ${outerC}`;
+    DOM.sliceEntityQi.style.strokeDashoffset = -(ratioAmbient * outerC);
+  }
+
+  // Inner Ring (Radius=38, C=238.76)
+  const innerC = 238.76;
+  const ratioLing = Math.max(0, Math.min(1, lingQiInfo / innerTotal));
+  const ratioSha = Math.max(0, Math.min(1, shaQiInfo / innerTotal));
+
+  if (DOM.sliceLingQi) {
+    DOM.sliceLingQi.style.strokeDasharray = `${ratioLing * innerC} ${innerC}`;
+    DOM.sliceLingQi.style.strokeDashoffset = 0;
+  }
+  if (DOM.sliceShaQi) {
+    DOM.sliceShaQi.style.strokeDasharray = `${ratioSha * innerC} ${innerC}`;
+    DOM.sliceShaQi.style.strokeDashoffset = -(ratioLing * innerC);
+  }
+
+  if (particles) {
+    particles.setIntensity(ambientQiInfo, shaQiInfo, universeTotal);
+    particles.setEntities(state.entities || []);
+  }
 
   renderLeaderboard();
   renderFocus();
