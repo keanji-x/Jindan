@@ -40,6 +40,18 @@ export class ApiClient {
     return this.request<Record<string, unknown>>("GET", `/entity/${id}`);
   }
 
+  getObserve(id: string) {
+    return this.request<Record<string, unknown>>("GET", `/entity/${id}/observe`);
+  }
+
+  getMemory(id: string) {
+    return this.request<Record<string, unknown>>("GET", `/entity/${id}/memory`);
+  }
+
+  getPlan(id: string) {
+    return this.request<Record<string, unknown>[]>("GET", `/entity/${id}/plan`);
+  }
+
   // ── Unified Action ─────────────────────────────────────
 
   performAction(entityId: string, action: ActionId, targetId?: string) {
