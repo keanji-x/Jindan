@@ -1,15 +1,19 @@
 // ============================================================
 // Action type definitions
+//
+// v3: ActionContext updated to use AmbientPool
 // ============================================================
 
-import type { SpeciesType, Entity } from "../types.js";
+import type { ParticleId } from "../../engine/types.js";
+import type { WorldEvent } from "../../world/types.js";
+import type { Entity, SpeciesType } from "../types.js";
 
 /** 动态传入的上下文环境，解耦具体的 World 类 */
 export interface ActionContext {
   actionCost: number;
-  ambientQi: { current: number; total: number };
+  ambientPool: { pools: Record<ParticleId, number>; total: number };
   tick: number;
-  events: { emit: (event: any) => void };
+  events: { emit: (event: WorldEvent) => void };
   target?: Entity;
 }
 

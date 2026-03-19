@@ -1,76 +1,114 @@
 // ============================================================
-// DevourSystem — 吞噬 (PvE / PvP) with qi conservation fix
+// DevourSystem — 吞噬 (PvE / PvP) with equation solver
+//
+// v3: Delegates particle accounting to EquationSolver.
+// No more hardcoded 80/20 — the equation itself produces it.
 // ============================================================
 
-import type { EventBus } from "../EventBus.js";
-import type { Entity } from "../entity/types.js";
+import { solve } from "../engine/EquationSolver.js";
+import { UNIVERSE } from "../engine/index.js";
 import type { ActionHandler } from "../entity/actions/types.js";
-import { DEVOUR_CONFIG } from "./config.js";
-import type { AmbientQi, DevourResult } from "./types.js";
 
-export const doDevour: ActionHandler = (entity, actionId, context) => {
-  const { actionCost, ambientQi, tick, events, target } = context;
+export const doDevour: ActionHandler = (entity, _actionId, context) => {
+  const { actionCost, ambientPool, tick, events, target } = context;
   if (!target) return { success: false, reason: "必须指定要吞噬的目标" };
-  if (!target.alive) {
-    return { success: false, reason: "目标不存在或已消亡" };
-  }
+  if (!target.alive) return { success: false, reason: "目标不存在或已消亡" };
 
-  const attackerQi = entity.components.qi;
+  const attackerTank = entity.components.tank;
   const attackerCombat = entity.components.combat;
   const attackerCult = entity.components.cultivation;
-  const targetQi = target.components.qi;
+  const targetTank = target.components.tank;
   const targetCombat = target.components.combat;
   const targetCult = target.components.cultivation;
 
-  if (!attackerQi || !attackerCombat || !targetQi || !targetCombat || !attackerCult || !targetCult) {
-    return { success: false, reason: "实体缺失必要组件(Qi, Combat, Cultivation)" };
+  if (
+    !attackerTank ||
+    !attackerCombat ||
+    !targetTank ||
+    !targetCombat ||
+    !attackerCult ||
+    !targetCult
+  ) {
+    return { success: false, reason: "实体缺失必要组件(Tank, Combat, Cultivation)" };
   }
 
-  // Action 灵气消耗 → 回归天地
-  if (attackerQi.current <= actionCost) {
+  // Action cost: core particle → ambient
+  const core = attackerTank.coreParticle;
+  if ((attackerTank.tanks[core] ?? 0) <= actionCost) {
     return { success: false, reason: "灵气不足以发动吞噬" };
   }
-  attackerQi.current -= actionCost;
-  ambientQi.current += actionCost; // 守恒
+  attackerTank.tanks[core] = (attackerTank.tanks[core] ?? 0) - actionCost;
+  ambientPool.pools[core] = (ambientPool.pools[core] ?? 0) + actionCost;
 
-  // 计算胜率 (sigmoid)
-  const k = DEVOUR_CONFIG.powerScaling;
+  // Combat resolution (sigmoid)
+  const k = UNIVERSE.devourPowerScaling;
   const winProb = 1 / (1 + Math.exp(-k * (attackerCombat.power - targetCombat.power)));
   const attackerWins = Math.random() < winProb;
 
   const winner = attackerWins ? entity : target;
   const loser = attackerWins ? target : entity;
-  const winnerQi = attackerWins ? attackerQi : targetQi;
-  const loserQi = attackerWins ? targetQi : attackerQi;
-  const winnerCult = attackerWins ? attackerCult : targetCult;
-  const loserCult = attackerWins ? targetCult : attackerCult;
+  const winnerTank = attackerWins ? attackerTank : targetTank;
+  const loserTank = attackerWins ? targetTank : attackerTank;
 
   const crossSpecies = entity.species !== target.species;
+  const winnerReactor = UNIVERSE.reactors[winner.species]!;
 
-  // 败者灵气分配 — 严格守恒
-  const absorbRatio = crossSpecies
-    ? DEVOUR_CONFIG.crossSpeciesAbsorb
-    : DEVOUR_CONFIG.sameSpeciesAbsorb;
+  // Select equation based on cross/same species
+  const eqId = crossSpecies ? winnerReactor.devourCrossEq : winnerReactor.devourSameEq;
+  const eq = UNIVERSE.equations[eqId]!;
 
-  const loserTotalQi = loserQi.current;
-  const rawGain = Math.floor(loserTotalQi * absorbRatio);
+  // The loser's total core particles become the "food"
+  const loserCore = loserTank.coreParticle;
+  const loserTotal = loserTank.tanks[loserCore] ?? 0;
 
-  // 胜者实际能吸收的量 (不能超过 maxQi)
-  const space = winnerQi.max - winnerQi.current;
-  const actualGain = Math.min(rawGain, space);
+  // Calculate scale: how many times to run the equation
+  // For cross-species: input has the non-core particle of the winner
+  // We scale based on the total food available
+  const nonCoreInEq = Object.entries(eq.input).find(([pid]) => pid !== winnerTank.coreParticle);
 
-  // 剩余全部回归天地 (包括溢出部分)
-  const qiReturned = loserTotalQi - actualGain;
+  let scale: number;
+  if (nonCoreInEq && crossSpecies) {
+    // Cross-species: scale by how much non-core (food) is available
+    scale = loserTotal / nonCoreInEq[1];
+  } else {
+    // Same-species: scale by how much core (food) is available
+    const inputKey = Object.keys(eq.input)[0]!;
+    scale = loserTotal / eq.input[inputKey]!;
+  }
+  scale = Math.floor(scale);
+  if (scale <= 0) scale = 1;
 
-  // 执行转移
-  winnerQi.current += actualGain;
-  ambientQi.current += qiReturned; // 守恒
+  // Temporarily move loser's particles into winner's tanks for the reaction
+  // (Winner's reactor "digests" the food)
+  for (const [pid, amount] of Object.entries(loserTank.tanks)) {
+    winnerTank.tanks[pid] = (winnerTank.tanks[pid] ?? 0) + amount;
+  }
 
-  // 败者死亡
-  loserQi.current = 0;
+  // Run the equation through the solver
+  const result = solve(
+    eq,
+    scale,
+    { particles: winnerTank.tanks },
+    { particles: ambientPool.pools },
+    winnerTank.coreParticle,
+  );
+
+  // Cap core particle to maxTanks
+  const winnerCoreMax = winnerTank.maxTanks[winnerTank.coreParticle] ?? Infinity;
+  const winnerCoreNow = winnerTank.tanks[winnerTank.coreParticle] ?? 0;
+  if (winnerCoreNow > winnerCoreMax) {
+    const overflow = winnerCoreNow - winnerCoreMax;
+    winnerTank.tanks[winnerTank.coreParticle] = winnerCoreMax;
+    ambientPool.pools[winnerTank.coreParticle] =
+      (ambientPool.pools[winnerTank.coreParticle] ?? 0) + overflow;
+  }
+
+  // Loser dies: clear all tanks (particles already moved to winner)
+  loserTank.tanks = Object.fromEntries(UNIVERSE.particles.map((p) => [p.id, 0]));
   loser.alive = false;
 
-  const flux = actionCost + actualGain + qiReturned;
+  const actualGain = result.success ? Math.abs(result.deltas[winnerTank.coreParticle] ?? 0) : 0;
+  const flux = actionCost + result.flux;
 
   events.emit({
     tick,
@@ -79,12 +117,13 @@ export const doDevour: ActionHandler = (entity, actionId, context) => {
       winner: { id: winner.id, name: winner.name, species: winner.species },
       loser: { id: loser.id, name: loser.name, species: loser.species },
       qiGained: actualGain,
-      qiReturned,
+      qiReturned: result.flux - actualGain,
       crossSpecies,
       winProb,
+      equation: eqId,
     },
-    message: `⚔️「${winner.name}」吞噬了「${loser.name}」！夺取灵气 ${actualGain}（散溢 ${qiReturned}）`,
+    message: `⚔️「${winner.name}」吞噬了「${loser.name}」！夺取灵气 ${actualGain}（散溢 ${Math.floor(result.flux - actualGain)}）[${eq.name}]`,
   });
 
   return { success: true, winner: winner.id, loser: loser.id, absorbed: actualGain, flux };
-}
+};

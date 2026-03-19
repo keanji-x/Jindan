@@ -4,7 +4,7 @@
 // ============================================================
 
 import { parseArgs } from "node:util";
-import { type ActionDef, type ActionId, ActionRegistry } from "@jindan/core";
+import { type ActionDef, ActionRegistry } from "@jindan/core";
 import { ApiClient } from "./ApiClient.js";
 import {
   formatActionResult,
@@ -123,6 +123,7 @@ async function main() {
         break;
       }
     }
+    process.exit(0);
   } catch (err) {
     if (err instanceof UsageError) {
       console.error(err.message);
@@ -156,7 +157,7 @@ function printHelp() {
 
   for (const a of actions) {
     if (a.id === "rest") continue;
-    const targetHint = a.needsTarget ? " -t <tid>" : "";
+    const _targetHint = a.needsTarget ? " -t <tid>" : "";
     const species = a.species.join("/");
     const line = `    ${a.cliCommand.padEnd(24)}${a.cliHelp} [${species}]`;
     console.log(`║  ${line.padEnd(56)}║`);

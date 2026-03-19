@@ -16,7 +16,7 @@ import { MEDITATE } from "./meditate.js";
 import { MOONLIGHT } from "./moonlight.js";
 import { PHOTOSYNTH } from "./photosynth.js";
 import { REST } from "./rest.js";
-import type { ActionDef, ActionId, ActionHandler } from "./types.js";
+import type { ActionDef, ActionHandler, ActionId } from "./types.js";
 
 /** All registered actions */
 const ALL_ACTIONS: ActionDef[] = [MEDITATE, MOONLIGHT, PHOTOSYNTH, DEVOUR, BREAKTHROUGH, REST];

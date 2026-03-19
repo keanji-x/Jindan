@@ -1,13 +1,17 @@
 // ============================================================
 // World types — world-level state and events
+//
+// v3: AmbientQi → AmbientPool (multi-particle)
 // ============================================================
 
+import type { ParticleId } from "../engine/types.js";
 import type { ActionId, Entity, SpeciesType } from "../entity/types.js";
 
-/** 天地灵气 */
-export interface AmbientQi {
-  current: number;
-  /** 世界灵气总量 (恒定: ambient + Σ entity qi) */
+/** 天地环境粒子池 (replaces old AmbientQi) */
+export interface AmbientPool {
+  /** Current particle amounts in the environment */
+  pools: Record<ParticleId, number>;
+  /** Total particle count across entire universe (conserved constant) */
   total: number;
 }
 
@@ -15,7 +19,7 @@ export interface AmbientQi {
 export interface WorldState {
   tick: number;
   qiFlux: number;
-  ambientQi: AmbientQi;
+  ambientPool: AmbientPool;
   entities: Map<string, Entity>;
 }
 
