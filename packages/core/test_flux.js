@@ -9,19 +9,19 @@ console.log(`Entities: ${e1.id}, ${e2.id}`);
 
 let tickTriggered = 0;
 world.events.onAny((e) => {
-    if (e.type === "tick_complete") {
-        tickTriggered++;
-        console.log(`[Event] Tick Advanced to ${e.tick}`);
-    } else if (e.type === "entity_breakthrough") {
-        console.log(`[Event] Breakthrough:`, e.message);
-    } else if (e.type === "entity_devoured") {
-        console.log(`[Event] Devour:`, e.message);
-    }
+  if (e.type === "tick_complete") {
+    tickTriggered++;
+    console.log(`[Event] Tick Advanced to ${e.tick}`);
+  } else if (e.type === "entity_breakthrough") {
+    console.log(`[Event] Breakthrough:`, e.message);
+  } else if (e.type === "entity_devoured") {
+    console.log(`[Event] Devour:`, e.message);
+  }
 });
 
 console.log("Starting meditate loop...");
-for (let i=0; i<100; i++) {
-   world.performAction(e1.id, "meditate");
+for (let i = 0; i < 100; i++) {
+  world.performAction(e1.id, "meditate");
 }
 
 console.log(`Tick after 100 meditate: ${world.tick} (Ticks triggered: ${tickTriggered})`);

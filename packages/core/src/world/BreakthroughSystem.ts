@@ -1,70 +1,67 @@
 // ============================================================
 // BreakthroughSystem — 境界突破 (相变)
+//
+// v3: Uses ReactorTemplate for realm-based recalculation.
 // ============================================================
 
-import type { EventBus } from "../EventBus.js";
-import { SPECIES } from "../entity/index.js";
-import type { Entity } from "../entity/types.js";
+import { UNIVERSE } from "../engine/index.js";
 import type { ActionHandler } from "../entity/actions/types.js";
-import { BREAKTHROUGH_CONFIG } from "./config.js";
-import type { AmbientQi } from "./types.js";
-
-export interface BreakthroughResult {
-  success: boolean;
-  newRealm?: number;
-  reason?: string;
-  expLost?: number;
-}
 
 export const doBreakthrough: ActionHandler = (entity, _actionId, context) => {
-  const { actionCost, ambientQi, tick, events } = context;
-  const qiComp = entity.components.qi;
+  const { actionCost, ambientPool, tick, events } = context;
+  const tankComp = entity.components.tank;
   const cultComp = entity.components.cultivation;
   const combatComp = entity.components.combat;
 
-  if (!qiComp || !cultComp || !combatComp) {
-    return { success: false, reason: "实体缺少必要组件(Qi, Cultivation, Combat)" };
+  if (!tankComp || !cultComp || !combatComp) {
+    return { success: false, reason: "实体缺少必要组件(Tank, Cultivation, Combat)" };
   }
 
   if (cultComp.realm >= 10) {
     return { success: false, reason: "已是最高境界" };
   }
-  
-  if (qiComp.current / qiComp.max < 0.9) {
+
+  const core = tankComp.coreParticle;
+  const coreCurrent = tankComp.tanks[core] ?? 0;
+  const coreMax = tankComp.maxTanks[core] ?? 1;
+
+  if (coreCurrent / coreMax < 0.9) {
     return { success: false, reason: "灵气未臻圆满(需90%容量)" };
   }
 
-  const extraCost = BREAKTHROUGH_CONFIG.qiCost(cultComp.realm);
+  const bt = UNIVERSE.breakthrough;
+  const extraCost = bt.qiCostPerRealm * cultComp.realm;
   const totalCost = actionCost + extraCost;
 
-  if (qiComp.current <= totalCost) {
+  if (coreCurrent <= totalCost) {
     return { success: false, reason: "灵气不足以尝试突破" };
   }
 
-  // 消耗灵气 → 回归天地 (守恒)
-  qiComp.current -= totalCost;
-  ambientQi.current += totalCost;
+  // Consume core particles → ambient (conservation)
+  tankComp.tanks[core] = coreCurrent - totalCost;
+  ambientPool.pools[core] = (ambientPool.pools[core] ?? 0) + totalCost;
 
-  // 成功率
-  const qiRatio = qiComp.current / qiComp.max;
-  const successRate = Math.min(
-    BREAKTHROUGH_CONFIG.baseSuccessRate + qiRatio * 0.3,
-    BREAKTHROUGH_CONFIG.maxSuccessRate,
-  );
+  // Success rate
+  const qiRatio = (tankComp.tanks[core] ?? 0) / coreMax;
+  const successRate = Math.min(bt.baseSuccessRate + qiRatio * 0.3, bt.maxSuccessRate);
 
   if (Math.random() > successRate) {
-    const qiLoss = Math.floor(qiComp.current * BREAKTHROUGH_CONFIG.failQiLossRatio);
-    qiComp.current = Math.max(0, qiComp.current - qiLoss);
-    ambientQi.current += qiLoss; // 走火入魔，灵气散入天地
+    const qiLoss = Math.floor((tankComp.tanks[core] ?? 0) * bt.failLossRatio);
+    tankComp.tanks[core] = Math.max(0, (tankComp.tanks[core] ?? 0) - qiLoss);
+    ambientPool.pools[core] = (ambientPool.pools[core] ?? 0) + qiLoss;
     return { success: false, reason: "突破失败，真气逆流", flux: totalCost + qiLoss };
   }
 
-  // 成功: 相变
+  // Success: phase transition (相变)
   cultComp.realm += 1;
 
-  const template = SPECIES[entity.species]!;
-  qiComp.max = template.baseMaxQi(cultComp.realm);
-  combatComp.power = template.basePower(cultComp.realm) + Math.floor(Math.random() * cultComp.realm * 2);
+  const reactor = UNIVERSE.reactors[entity.species]!;
+  const newMaxTanks = reactor.baseTanks(cultComp.realm);
+  for (const [pid, max] of Object.entries(newMaxTanks)) {
+    tankComp.maxTanks[pid] = max;
+  }
+  combatComp.power =
+    reactor.basePower(cultComp.realm) + Math.floor(Math.random() * cultComp.realm * 2);
 
   events.emit({
     tick,
@@ -80,4 +77,4 @@ export const doBreakthrough: ActionHandler = (entity, _actionId, context) => {
   });
 
   return { success: true, newRealm: cultComp.realm, flux: totalCost };
-}
+};

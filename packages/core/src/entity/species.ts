@@ -1,32 +1,24 @@
 // ============================================================
-// Species templates — defines racial traits
+// Species templates — derives from ReactorTemplate for compat
+//
+// v3: Simplified. Power/tank formulas now in ReactorTemplate.
+// This module bridges old ActionRegistry species checks.
 // ============================================================
 
+import { UNIVERSE } from "../engine/index.js";
 import type { SpeciesTemplate } from "./types.js";
 
-export const SPECIES: Record<string, SpeciesTemplate> = {
-  human: {
-    type: "human",
-    name: "修士",
-    baseQiDrain: 5,
-    baseMaxQi: (realm) => 100 * realm,
-    basePower: (realm) => 10 * realm,
-    actions: ["meditate", "devour", "breakthrough", "rest"],
-  },
-  beast: {
-    type: "beast",
-    name: "妖兽",
-    baseQiDrain: 10,
-    baseMaxQi: (realm) => 80 * realm,
-    basePower: (realm) => 12 * realm,
-    actions: ["moonlight", "devour", "breakthrough", "rest"],
-  },
-  plant: {
-    type: "plant",
-    name: "灵植",
-    baseQiDrain: 2,
-    baseMaxQi: (realm) => 150 * realm,
-    basePower: (realm) => 4 * realm,
-    actions: ["photosynth", "rest"],
-  },
-};
+/** Build species templates from universe reactor config */
+function buildSpecies(): Record<string, SpeciesTemplate> {
+  const result: Record<string, SpeciesTemplate> = {};
+  for (const [key, reactor] of Object.entries(UNIVERSE.reactors)) {
+    result[key] = {
+      type: reactor.id as SpeciesTemplate["type"],
+      name: reactor.name,
+      actions: reactor.actions,
+    };
+  }
+  return result;
+}
+
+export const SPECIES: Record<string, SpeciesTemplate> = buildSpecies();

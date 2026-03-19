@@ -1,14 +1,13 @@
 // ============================================================
-// Qi Config — rules of ambient and conservation
+// Qi Config — re-exports from engine universe config
+//
+// v3: Legacy compatibility shim. Real config in engine/.
 // ============================================================
 
-export const QI_CONFIG = {
-  totalQi: 100_000,
-  initialAmbientRatio: 0.9,
+import { UNIVERSE } from "../../engine/index.js";
 
-  /** 被动流失公式: baseQiDrain × ln(1 + Q_total / Q_ambient) */
-  drainFormula: (baseQiDrain: number, qTotal: number, qAmbient: number): number => {
-    const ambient = Math.max(qAmbient, 1);
-    return baseQiDrain * Math.log(1 + qTotal / ambient);
-  },
+export const QI_CONFIG = {
+  totalQi: UNIVERSE.totalParticles,
+  initialAmbientRatio: UNIVERSE.initialAmbientRatio,
+  drainFormula: UNIVERSE.drainFormula,
 } as const;

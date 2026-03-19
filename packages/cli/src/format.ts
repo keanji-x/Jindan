@@ -1,8 +1,65 @@
 // ============================================================
-// CLI Output Formatters — v2: unified Entity model
+// CLI Output Formatters — v3: TankComponent model, no `any`
 // ============================================================
 
-type Obj = Record<string, unknown>;
+// ── Typed shapes for API responses ────────────────────────
+
+interface TankData {
+  tanks?: Record<string, number>;
+  maxTanks?: Record<string, number>;
+  coreParticle?: string;
+}
+
+interface ComponentsData {
+  tank?: TankData;
+  qi?: { current?: number; max?: number };
+  combat?: { power?: number };
+  cultivation?: { realm?: number };
+}
+
+interface EntityData {
+  id: string;
+  name: string;
+  species: string;
+  alive: boolean;
+  rank?: number;
+  components?: ComponentsData;
+}
+
+interface PoolData {
+  pools?: Record<string, number>;
+  current?: number;
+  total?: number;
+}
+
+interface WorldData {
+  tick: number;
+  ambientPool?: PoolData;
+  ambientQi?: PoolData;
+  entities?: EntityData[];
+}
+
+interface EventData {
+  message: string;
+}
+
+interface ActionData {
+  action: string;
+  description: string;
+  possible: boolean;
+  reason?: string;
+}
+
+interface ActionResultData {
+  success: boolean;
+  tick: number;
+  error?: string;
+  reason?: string;
+  events?: EventData[];
+  availableActions?: ActionData[];
+}
+
+// ── Helpers ───────────────────────────────────────────────
 
 const SPECIES_EMOJI: Record<string, string> = {
   human: "🧘",
@@ -10,9 +67,34 @@ const SPECIES_EMOJI: Record<string, string> = {
   plant: "🌿",
 };
 
-export function formatWorld(world: Obj): string {
-  const qi = world.ambientQi as Obj;
-  const entities = (world.entities as Obj[]) ?? [];
+function getStats(e: EntityData) {
+  const c = e.components ?? {};
+  const tank = c.tank;
+  const core = tank?.coreParticle ?? "ql";
+  return {
+    realm: c.cultivation?.realm ?? "?",
+    power: c.combat?.power ?? "?",
+    qi: tank?.tanks?.[core] ?? c.qi?.current ?? "?",
+    maxQi: tank?.maxTanks?.[core] ?? c.qi?.max ?? "?",
+  };
+}
+
+// ── Formatters ────────────────────────────────────────────
+
+export function formatWorld(world: WorldData): string {
+  const pool = world.ambientPool ?? world.ambientQi;
+
+  let ambientStr: string;
+  if (pool?.pools) {
+    const parts = Object.entries(pool.pools)
+      .map(([k, v]) => `${k}=${v}`)
+      .join(" ");
+    ambientStr = `${parts} / 总量 ${pool.total}`;
+  } else {
+    ambientStr = `${pool?.current} / ${pool?.total}`;
+  }
+
+  const entities = world.entities ?? [];
   const humans = entities.filter((e) => e.species === "human");
   const beasts = entities.filter((e) => e.species === "beast");
   const plants = entities.filter((e) => e.species === "plant");
@@ -20,7 +102,7 @@ export function formatWorld(world: Obj): string {
   return `
 ┌─── 🌍 天地气象 ─── Tick ${world.tick} ───┐
 
-  天地灵气: ${qi.current} / ${qi.total}
+  天地灵气: ${ambientStr}
   修士: ${humans.length} 人
   妖兽: ${beasts.length} 只
   灵植: ${plants.length} 株
@@ -28,25 +110,26 @@ export function formatWorld(world: Obj): string {
 └──────────────────────────────────┘`;
 }
 
-export function formatEntity(e: Obj): string {
-  const emoji = SPECIES_EMOJI[e.species as string] ?? "❓";
-  const speciesName = { human: "修士", beast: "妖兽", plant: "灵植" }[e.species as string] ?? "???";
+export function formatEntity(e: EntityData): string {
+  const emoji = SPECIES_EMOJI[e.species] ?? "❓";
+  const speciesName =
+    ({ human: "修士", beast: "妖兽", plant: "灵植" } as Record<string, string>)[e.species] ?? "???";
+  const { realm, power, qi, maxQi } = getStats(e);
 
   return `
 ┌─── ${emoji} ${e.name} (${e.id}) ───┐
 
-  种族: ${speciesName} │ 境界: ${e.realm} 阶 │ 战力: ${e.power}
-  灵气: ${e.qi}/${e.maxQi} (${e.alive ? "存活" : "已消亡"})
-  灵石: ${e.spiritStones}
+  种族: ${speciesName} │ 境界: ${realm} 阶 │ 战力: ${power}
+  灵气: ${qi}/${maxQi} (${e.alive ? "存活" : "已消亡"})
 
 └────────────────────────────────┘`;
 }
 
-export function formatActionResult(result: Obj): string {
-  const events = (result.events as Obj[]) ?? [];
-  const actions = (result.availableActions as Obj[]) ?? [];
+export function formatActionResult(result: ActionResultData): string {
+  const events = result.events ?? [];
+  const actions = result.availableActions ?? [];
 
-  let output = result.success ? "✅ 行动成功" : `❌ ${result.error ?? "行动失败"}`;
+  let output = result.success ? "✅ 行动成功" : `❌ ${result.error || result.reason || "行动失败"}`;
   output += ` │ Tick ${result.tick}\n`;
 
   if (events.length > 0) {
@@ -69,25 +152,27 @@ export function formatActionResult(result: Obj): string {
   return output;
 }
 
-export function formatEntities(entities: Obj[]): string {
+export function formatEntities(entities: EntityData[]): string {
   if (entities.length === 0) return "  (天地无生灵)";
 
   let output = "\n┌─── 🌍 万灵录 ───┐\n\n";
   for (const e of entities) {
-    const emoji = SPECIES_EMOJI[e.species as string] ?? "❓";
-    output += `  ${emoji} ${e.id} │ ${e.name} │ ${e.realm}阶 │ 战力 ${e.power} │ 灵气 ${e.qi}/${e.maxQi}\n`;
+    const emoji = SPECIES_EMOJI[e.species] ?? "❓";
+    const { realm, power, qi, maxQi } = getStats(e);
+    output += `  ${emoji} ${e.id} │ ${e.name} │ ${realm}阶 │ 战力 ${power} │ 灵气 ${qi}/${maxQi}\n`;
   }
   output += "\n└────────────────────┘";
   return output;
 }
 
-export function formatLeaderboard(entries: Obj[]): string {
+export function formatLeaderboard(entries: EntityData[]): string {
   if (entries.length === 0) return "  (暂无生灵)";
 
   let output = "\n┌─── 🏆 排行榜 ───┐\n\n";
   for (const e of entries) {
-    const emoji = SPECIES_EMOJI[e.species as string] ?? "❓";
-    output += `  #${e.rank} ${emoji} ${e.name} │ ${e.realm}阶 │ 战力 ${e.power} │ 灵气 ${e.qi}/${e.maxQi}\n`;
+    const emoji = SPECIES_EMOJI[e.species] ?? "❓";
+    const { realm, power, qi, maxQi } = getStats(e);
+    output += `  #${e.rank} ${emoji} ${e.name} │ ${realm}阶 │ 战力 ${power} │ 灵气 ${qi}/${maxQi}\n`;
   }
   output += "\n└──────────────────┘";
   return output;

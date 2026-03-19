@@ -1,33 +1,32 @@
 // ============================================================
 // AbsorbSystem — 吸收灵气 (打坐 / 月华 / 光合)
+//
+// v3: Pulls core particles from ambient pool.
 // ============================================================
 
-import type { EventBus } from "../EventBus.js";
+import { UNIVERSE } from "../engine/index.js";
 import { ActionRegistry } from "../entity/actions/index.js";
-import type { Entity } from "../entity/types.js";
 import type { ActionHandler } from "../entity/actions/types.js";
-import { ABSORB_CONFIG } from "./config.js";
-import type { AmbientQi } from "./types.js";
-
-export interface AbsorbResult {
-  success: boolean;
-  absorbed: number;
-  expGained: number;
-  actionCost: number;
-  reason?: string;
-}
 
 export const doAbsorb: ActionHandler = (entity, actionId, context) => {
-  const { actionCost, ambientQi, tick, events } = context;
+  const { actionCost, ambientPool, tick, events } = context;
   const action = actionId as "meditate" | "moonlight" | "photosynth";
-  const qiComp = entity.components.qi;
+  const tankComp = entity.components.tank;
   const cultComp = entity.components.cultivation;
-  if (!qiComp || !cultComp) {
-    return { success: false, reason: "实体缺少组件(Qi或Cultivation)", absorbed: 0, flux: 0, actionCost: 0 };
+  if (!tankComp || !cultComp) {
+    return {
+      success: false,
+      reason: "实体缺少组件(Tank或Cultivation)",
+      absorbed: 0,
+      flux: 0,
+      actionCost: 0,
+    };
   }
 
-  // Action 灵气消耗 → 回归天地
-  if (qiComp.current <= actionCost) {
+  const core = tankComp.coreParticle;
+
+  // Action cost: core particle → ambient
+  if ((tankComp.tanks[core] ?? 0) <= actionCost) {
     return {
       success: false,
       absorbed: 0,
@@ -36,20 +35,27 @@ export const doAbsorb: ActionHandler = (entity, actionId, context) => {
       reason: "灵气不足以执行此行动",
     };
   }
-  qiComp.current -= actionCost;
-  ambientQi.current += actionCost; // 守恒
+  tankComp.tanks[core] = (tankComp.tanks[core] ?? 0) - actionCost;
+  ambientPool.pools[core] = (ambientPool.pools[core] ?? 0) + actionCost;
 
-  // 从天地吸收灵气
-  const cfg = ABSORB_CONFIG[action];
+  // Pull core particles from ambient
+  const cfg = UNIVERSE.absorb[action];
+  if (!cfg) {
+    return { success: false, reason: `未知吸收动作: ${action}`, absorbed: 0, flux: 0, actionCost };
+  }
   const maxAbsorb = cfg.base + cfg.perRealm * cultComp.realm;
-  const canAbsorb = qiComp.max - qiComp.current;
-  const available = ambientQi.current;
+  const coreMax = tankComp.maxTanks[core] ?? 0;
+  const canAbsorb = coreMax - (tankComp.tanks[core] ?? 0);
+  const available = ambientPool.pools[core] ?? 0;
   const absorbed = Math.min(maxAbsorb, canAbsorb, available);
 
-  ambientQi.current -= absorbed;
-  qiComp.current += absorbed;
+  ambientPool.pools[core] = (ambientPool.pools[core] ?? 0) - absorbed;
+  tankComp.tanks[core] = (tankComp.tanks[core] ?? 0) + absorbed;
 
   const flux = actionCost + absorbed;
+
+  const coreCurrent = tankComp.tanks[core] ?? 0;
+  const coreMaxVal = tankComp.maxTanks[core] ?? 1;
 
   events.emit({
     tick,
@@ -60,11 +66,11 @@ export const doAbsorb: ActionHandler = (entity, actionId, context) => {
       species: entity.species,
       action,
       absorbed,
-      qi: qiComp.current,
-      maxQi: qiComp.max,
+      qi: coreCurrent,
+      maxQi: coreMaxVal,
     },
-    message: `「${entity.name}」${ActionRegistry.name(action)}，吸纳天地灵蕴 ${absorbed}，当前灵气饱满度 ${Math.floor((qiComp.current / qiComp.max) * 100)}%`,
+    message: `「${entity.name}」${ActionRegistry.name(action)}，吸纳天地灵蕴 ${absorbed}，当前灵气饱满度 ${Math.floor((coreCurrent / coreMaxVal) * 100)}%`,
   });
 
   return { success: true, absorbed, actionCost, flux };
-}
+};

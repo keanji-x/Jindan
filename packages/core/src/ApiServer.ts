@@ -158,16 +158,20 @@ export class ApiServer {
           const bPower = b.components.combat?.power ?? 0;
           return bRealm * 1000 + bPower - (aRealm * 1000 + aPower);
         })
-        .map((e, i) => ({
-          rank: i + 1,
-          id: e.id,
-          name: e.name,
-          species: e.species,
-          realm: e.components.cultivation?.realm ?? 0,
-          power: e.components.combat?.power ?? 0,
-          qi: e.components.qi?.current ?? 0,
-          maxQi: e.components.qi?.max ?? 0,
-        }));
+        .map((e, i) => {
+          const tank = e.components.tank;
+          const core = tank?.coreParticle ?? "ql";
+          return {
+            rank: i + 1,
+            id: e.id,
+            name: e.name,
+            species: e.species,
+            realm: e.components.cultivation?.realm ?? 0,
+            power: e.components.combat?.power ?? 0,
+            qi: tank?.tanks[core] ?? 0,
+            maxQi: tank?.maxTanks[core] ?? 0,
+          };
+        });
     }
 
     if (method === "GET" && path === "/entities") return this.world.getAliveEntities();
