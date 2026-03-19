@@ -1039,7 +1039,72 @@ main::-webkit-scrollbar-thumb {
   }
 }
 
+/* ── Soul Group (前世聚合) ──────────────────────────────── */
+
+.tomb-soul-group {
+  flex: 0 0 calc(50% - 0.5rem);
+  min-width: 250px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.tomb-soul-group > .tomb-card {
+  flex: unset;
+  min-width: unset;
+}
+
+.tomb-past-toggle {
+  cursor: pointer;
+  font-size: 0.75rem;
+  color: #a78bfa;
+  padding: 0.4rem 1rem;
+  letter-spacing: 0.5px;
+  user-select: none;
+  transition: color 0.2s ease;
+}
+
+.tomb-past-toggle:hover {
+  color: #c4b5fd;
+}
+
+.tomb-past-toggle.expanded {
+  color: #c4b5fd;
+}
+
+.tomb-past-lives {
+  display: none;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding-left: 1rem;
+  border-left: 2px solid rgba(139, 92, 246, 0.15);
+  margin-left: 1rem;
+  margin-top: 0.3rem;
+  animation: tombAppear 0.3s ease-out forwards;
+}
+
+.tomb-past-lives.show {
+  display: flex;
+}
+
+.tomb-card.past-life {
+  flex: unset;
+  min-width: unset;
+  opacity: 0.7;
+  padding: 0.8rem;
+}
+
+.tomb-card.past-life .tomb-name {
+  font-size: 0.85rem;
+}
+
+.tomb-card.past-life .tomb-epitaph {
+  max-height: 50px;
+  font-size: 0.75rem;
+}
+
 @media (max-width: 768px) {
+  .tomb-soul-group,
   .tomb-card {
     flex: 0 0 100%;
   }

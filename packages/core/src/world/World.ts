@@ -85,7 +85,7 @@ export class World {
       }
       tankComp.tanks[core] = (tankComp.tanks[core] ?? 0) - actionCost;
       ambientPool.pools[core] = (ambientPool.pools[core] ?? 0) + actionCost;
-      return { success: true, rested: true, actionCost, flux: actionCost };
+      return { success: true, rested: true, actionCost };
     });
   }
 
@@ -245,7 +245,7 @@ export class World {
     if ((ambient.pools.ql ?? 0) > maxCap) ambient.pools.ql = maxCap;
     if ((ambient.pools.qs ?? 0) > maxCap) ambient.pools.qs = maxCap;
 
-    // 3. 后台 AI (原生行为树) 现已转为 Actor 模型，由外部 (如 ApiServer) 定时驱动，从而产生真实 Flux 推动本世界时钟。
+    // 3. 后台 AI (原生行为树) 现已转为 Actor 模型，由外部 (如 ApiServer) 定时驱动。
 
     // 4. 化生池：天地灵蕴自发凝聚为新生命
     const { spawned } = runSpawnPool(ambient, aliveEntities, this.events, this._tick);
@@ -384,7 +384,7 @@ export class World {
    * 游魂执行盖棺定论：将 article + events 聚合为墓志铭，然后安息。
    * 只有 status === "lingering" 的实体可以执行。
    */
-  performTomb(entityId: string): {
+  performTomb(entityId: string, callerEpitaph?: string): {
     success: boolean;
     epitaph?: string;
     snapshot?: { events: string[]; history: EntityHistory };
@@ -400,21 +400,29 @@ export class World {
     const history = this.ledger.graph.getEntityHistory(entityId);
     const allLifeEvents = entity.life.events;
 
-    // 2. Build epitaph: aggregate old article + this life's event summary
-    const eventSummaryLines: string[] = [];
-    const allEvents = [...history.actionsInitiated, ...history.actionsReceived];
-    // Sort by tick for chronological order
-    allEvents.sort((a, b) => a.tick - b.tick);
-    for (const evt of allEvents) {
-      const direction = evt.sourceId === entityId ? "→" : "←";
-      const other = evt.sourceId === entityId ? (evt.targetId ?? "天地") : evt.sourceId;
-      const dataStr = evt.data ? JSON.stringify(evt.data) : "";
-      eventSummaryLines.push(`[第${evt.tick}天] ${direction} ${evt.type} (${other}) ${dataStr}`);
-    }
-
+    // 2. Build epitaph
     const previousArticle = entity.life.article;
-    const lifeChapter = eventSummaryLines.join("\n");
-    const epitaph = previousArticle ? `${previousArticle}\n\n---\n\n${lifeChapter}` : lifeChapter;
+
+    let epitaph: string;
+    if (callerEpitaph) {
+      // Use the caller-provided epitaph (e.g. LLM-generated)
+      epitaph = previousArticle
+        ? `${previousArticle}\n\n---\n\n${callerEpitaph}`
+        : callerEpitaph;
+    } else {
+      // Fallback: aggregate raw event summary
+      const eventSummaryLines: string[] = [];
+      const allEvents = [...history.actionsInitiated, ...history.actionsReceived];
+      allEvents.sort((a, b) => a.tick - b.tick);
+      for (const evt of allEvents) {
+        const direction = evt.sourceId === entityId ? "→" : "←";
+        const other = evt.sourceId === entityId ? (evt.targetId ?? "天地") : evt.sourceId;
+        const dataStr = evt.data ? JSON.stringify(evt.data) : "";
+        eventSummaryLines.push(`[第${evt.tick}天] ${direction} ${evt.type} (${other}) ${dataStr}`);
+      }
+      const lifeChapter = eventSummaryLines.join("\n");
+      epitaph = previousArticle ? `${previousArticle}\n\n---\n\n${lifeChapter}` : lifeChapter;
+    }
 
     // 3. Entomb: update entity state
     entity.status = "entombed";
@@ -456,7 +464,8 @@ export class World {
 
     // Create new entity
     const newEntity = createEntity(newName, newSpecies, this.ledger.qiPool.state);
-    // Inherit article from past life
+    // Inherit soul identity and article from past life
+    newEntity.soulId = oldEntity.soulId;
     newEntity.life.article = oldEntity.life.article;
     this.ledger.setEntity(newEntity);
 

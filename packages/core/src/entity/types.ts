@@ -48,6 +48,8 @@ export interface CultivationComponent {
 /** 世界中的一个生灵 (reactor) */
 export interface Entity {
   id: string;
+  /** 灵魂唯一标识符 — 跨转生保持不变，用于聚合前世墓碑 */
+  soulId: string;
   name: string;
   species: SpeciesType;
   status: LifeStatus;

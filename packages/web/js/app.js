@@ -4,8 +4,9 @@
 
 import { ParticleSystem } from "./particles.js";
 
-const WS_URL = "ws://localhost:3001";
-const API_URL = "http://localhost:3001";
+// Derive URLs from current page location so it works with port forwarding, proxies, etc.
+const WS_URL = `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}`;
+const API_URL = `${window.location.protocol}//${window.location.host}`;
 const MAX_LOG_ENTRIES = 200;
 
 // ── State Management ────────────────────────────────────
@@ -63,23 +64,33 @@ const DOM = {
 // ── WebSocket ───────────────────────────────────────────
 let ws;
 let reconnectTimer;
+let reconnectDelay = 1000;
+const MAX_RECONNECT_DELAY = 5000;
 
 function connect() {
+  console.log(`[WS] Connecting to ${WS_URL} ...`);
   ws = new WebSocket(WS_URL);
 
   ws.onopen = () => {
+    console.log(`[WS] ✅ Connected!`);
     state.connected = true;
+    reconnectDelay = 1000; // reset backoff on success
     updateConnectionStatus();
     clearTimeout(reconnectTimer);
   };
 
-  ws.onclose = () => {
+  ws.onclose = (e) => {
+    console.log(`[WS] ❌ Closed (code=${e.code}, reason=${e.reason}), retry in ${reconnectDelay}ms`);
     state.connected = false;
     updateConnectionStatus();
-    reconnectTimer = setTimeout(connect, 3000);
+    reconnectTimer = setTimeout(connect, reconnectDelay);
+    reconnectDelay = Math.min(reconnectDelay * 1.5, MAX_RECONNECT_DELAY);
   };
 
-  ws.onerror = () => ws.close();
+  ws.onerror = (e) => {
+    console.error(`[WS] ⚠️ Error:`, e);
+    ws.close();
+  };
 
   ws.onmessage = (event) => {
     const data = JSON.parse(event.data);
@@ -92,6 +103,14 @@ function connect() {
     }
   };
 }
+
+// Reconnect when user returns to tab
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden && !state.connected) {
+    clearTimeout(reconnectTimer);
+    connect();
+  }
+});
 
 function updateConnectionStatus() {
   if (state.connected) {
@@ -248,7 +267,6 @@ function render() {
 
   renderLeaderboard();
   renderFocus();
-  fetchGraveyard();
 }
 
 function renderLeaderboard() {
@@ -433,33 +451,78 @@ function renderGraveyard() {
   const statusLabel = { lingering: "👻 游魂", entombed: "🪦 安息" };
 
   let html = "";
-  for (const g of state.graveyard) {
-    const emoji = speciesEmoji[g.species] || "❓";
-    const badge = statusLabel[g.status] || g.status;
-    const epitaphText = g.epitaph ? g.epitaph.replace(/</g, "&lt;").replace(/>/g, "&gt;") : "";
+  for (const group of state.graveyard) {
+    const lives = group.lives || [group]; // backward compat: flat item fallback
+    const latest = lives[lives.length - 1] || lives[0];
+    const pastLives = lives.slice(0, -1);
+    const emoji = speciesEmoji[latest.species] || "❓";
+    const badge = statusLabel[latest.status] || latest.status;
+    const epitaphText = latest.epitaph
+      ? latest.epitaph.replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br>")
+      : "";
+    const lifeCount = lives.length;
+    const soulId = group.soulId || latest.id;
 
+    html += `<div class="tomb-soul-group" data-soul="${soulId}">`;
+
+    // Main tombstone (latest life)
     html += `
-      <div class="tomb-card ${g.status}">
+      <div class="tomb-card ${latest.status}">
         <div class="tomb-header">
-          <span class="tomb-name">${emoji} ${g.name}</span>
-          <span class="tomb-status-badge ${g.status}">${badge}</span>
+          <span class="tomb-name">${emoji} ${latest.name}</span>
+          <span class="tomb-status-badge ${latest.status}">${badge}</span>
         </div>
-        <div class="tomb-species">${g.species}</div>
+        <div class="tomb-species">${latest.species}${lifeCount > 1 ? ` · 第${lifeCount}世` : ""}</div>
         <div class="tomb-epitaph">${epitaphText}</div>
-      </div>
-    `;
+      </div>`;
+
+    // Past lives (collapsed by default)
+    if (pastLives.length > 0) {
+      html += `
+        <div class="tomb-past-toggle" onclick="this.classList.toggle('expanded');this.nextElementSibling.classList.toggle('show')">
+          ▸ 前世轮回 (${pastLives.length}世)
+        </div>
+        <div class="tomb-past-lives">`;
+
+      for (const past of pastLives.reverse()) {
+        const pEmoji = speciesEmoji[past.species] || "❓";
+        const pBadge = statusLabel[past.status] || past.status;
+        const pEpitaph = past.epitaph
+          ? past.epitaph.replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br>")
+          : "";
+
+        html += `
+          <div class="tomb-card past-life ${past.status}">
+            <div class="tomb-header">
+              <span class="tomb-name">${pEmoji} ${past.name}</span>
+              <span class="tomb-status-badge ${past.status}">${pBadge}</span>
+            </div>
+            <div class="tomb-epitaph">${pEpitaph}</div>
+          </div>`;
+      }
+
+      html += `</div>`;
+    }
+
+    html += `</div>`;
   }
 
   DOM.graveyardList.innerHTML = html;
 }
 
 // ── Init ────────────────────────────────────────────────
+console.log(`[Init] API_URL=${API_URL}, WS_URL=${WS_URL}`);
 connect();
 
 fetch(`${API_URL}/world/status`)
   .then((r) => r.json())
   .then((data) => {
+    console.log(`[Init] HTTP fetch OK, tick=${data.tick}, entities=${data.entities?.length}`);
     updateWorldState(data);
     render();
+    fetchGraveyard();
   })
-  .catch(() => console.log("Initial HTTP fetch failed"));
+  .catch((err) => console.error("[Init] HTTP fetch failed:", err));
+
+// Poll graveyard every 5 seconds instead of every tick
+setInterval(fetchGraveyard, 5000);

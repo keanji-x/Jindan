@@ -47,7 +47,9 @@ export class ApiServer {
       for (const c of this.clients) if (c.readyState === 1) c.send(msg);
     });
 
-    this.wss.on("connection", (ws) => {
+    this.wss.on("connection", (ws, req) => {
+      const addr = req.socket.remoteAddress;
+      console.log(`[WS] Client connected from ${addr}, total=${this.clients.size + 1}`);
       this.clients.add(ws);
       ws.send(
         JSON.stringify({
@@ -55,7 +57,10 @@ export class ApiServer {
           data: this.world.getSnapshot(),
         }),
       );
-      ws.on("close", () => this.clients.delete(ws));
+      ws.on("close", () => {
+        this.clients.delete(ws);
+        console.log(`[WS] Client disconnected, total=${this.clients.size}`);
+      });
     });
 
     // Actor System: 每个拥有 Brain 的 NPC 作为一个独立的 Actor，每秒行动一次
@@ -154,6 +159,7 @@ export class ApiServer {
       const buf = await readFile(full);
       res.writeHead(200, {
         "Content-Type": MIME[extname(full)] ?? "application/octet-stream",
+        "Cache-Control": "no-cache",
       });
       res.end(buf);
     } catch {
@@ -200,7 +206,8 @@ export class ApiServer {
       }
 
       if (parts[3] === "tomb") {
-        return this.world.performTomb(id);
+        const epitaph = body.epitaph as string | undefined;
+        return this.world.performTomb(id, epitaph);
       }
 
       if (parts[3] === "reincarnate") {
@@ -289,12 +296,24 @@ export class ApiServer {
     if (method === "GET" && path === "/entities") return this.world.getAliveEntities();
 
     if (method === "GET" && path === "/graveyard") {
-      return this.world.getDeadEntities().map((e) => ({
-        id: e.id,
-        name: e.name,
-        species: e.species,
-        status: e.status,
-        epitaph: e.life.article,
+      const dead = this.world.getDeadEntities();
+      // Group by soulId so past lives of the same soul are aggregated
+      const soulMap = new Map<string, typeof dead>();
+      for (const e of dead) {
+        const key = e.soulId;
+        if (!soulMap.has(key)) soulMap.set(key, []);
+        soulMap.get(key)!.push(e);
+      }
+      return Array.from(soulMap.entries()).map(([soulId, lives]) => ({
+        soulId,
+        name: lives[lives.length - 1]!.name, // latest incarnation name
+        lives: lives.map((e) => ({
+          id: e.id,
+          name: e.name,
+          species: e.species,
+          status: e.status,
+          epitaph: e.life.article,
+        })),
       }));
     }
 

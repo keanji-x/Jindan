@@ -187,4 +187,44 @@ describe("Tomb System (坟墓系统)", () => {
 
     vi.useRealTimers();
   });
+
+  it("转生后新旧实体共享同一 soulId", () => {
+    const { world, prey } = createTestWorld();
+    const originalSoulId = prey.soulId;
+    expect(originalSoulId).toBeDefined();
+    expect(originalSoulId.length).toBeGreaterThan(0);
+
+    forceKill(world, prey.id);
+    world.performTomb(prey.id);
+
+    const reinResult = world.reincarnate(prey.id, "重生者", "human");
+    expect(reinResult.success).toBe(true);
+    expect(reinResult.entity!.soulId).toBe(originalSoulId);
+
+    vi.useRealTimers();
+  });
+
+  it("多次转生后 soulId 保持一致", () => {
+    const { world, prey } = createTestWorld();
+    const originalSoulId = prey.soulId;
+
+    // First death + reincarnation
+    forceKill(world, prey.id);
+    world.performTomb(prey.id);
+    const rein1 = world.reincarnate(prey.id, "二世", "beast");
+    expect(rein1.entity!.soulId).toBe(originalSoulId);
+
+    // Second death + reincarnation
+    forceKill(world, rein1.entity!.id);
+    world.performTomb(rein1.entity!.id);
+    const rein2 = world.reincarnate(rein1.entity!.id, "三世", "plant");
+    expect(rein2.entity!.soulId).toBe(originalSoulId);
+
+    // All three tombstones share the same soulId
+    const dead = world.getDeadEntities();
+    const sameSoul = dead.filter((e) => e.soulId === originalSoulId);
+    expect(sameSoul.length).toBe(2); // prey and rein1 (rein2 is alive)
+
+    vi.useRealTimers();
+  });
 });
