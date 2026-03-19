@@ -6,12 +6,12 @@ describe("World E2E Simulation Harness", () => {
   it("should run the world autonomously for N ticks without crashing", () => {
     const world = new World();
     attachFileLogger(world);
-    const observer = world.createEntity("太上老君", "human");
+    const _observer = world.createEntity("太上老君", "human");
 
-    let tickCount = 0;
+    let _tickCount = 0;
     world.events.onAny((e) => {
       if (e.type === "tick_complete") {
-        tickCount++;
+        _tickCount++;
       }
     });
 
