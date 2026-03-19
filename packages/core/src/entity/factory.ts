@@ -29,7 +29,7 @@ export function createEntity(name: string, species: SpeciesType, ambient: Ambien
   const reactor = UNIVERSE.reactors[species]!;
   const realm = 1;
   const maxTanks = reactor.baseTanks(realm);
-  const initialCore = maxTanks[reactor.coreParticle] ?? 100;
+  const initialCore = Math.floor((maxTanks[reactor.coreParticle] ?? 100) * 0.2);
 
   // Apply Yin-Yang pollution
   applyYinYangBirth(reactor.coreParticle, initialCore, ambient);

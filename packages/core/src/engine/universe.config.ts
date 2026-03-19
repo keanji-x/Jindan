@@ -103,7 +103,7 @@ export const UNIVERSE: UniverseConfig = {
       devourCrossEq: "digest_cross_l",
       devourSameEq: "digest_same_l",
       metabolismEq: "metabolize_l",
-      actions: ["photosynth", "rest"],
+      actions: ["photosynth", "breakthrough", "rest"],
     },
   },
 
