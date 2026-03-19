@@ -132,9 +132,34 @@ export class ApiServer {
     }
 
     if (method === "GET" && path.startsWith("/entity/")) {
-      const id = path.split("/")[2]!;
+      const parts = path.split("/");
+      const id = parts[2]!;
       const e = this.world.getEntity(id);
       if (!e) throw new ApiError("Entity not found");
+
+      if (parts[3] === "observe") {
+        const snapshot = this.world.getSnapshot();
+        const recentEvents = this.world.ledger.graph.getEventsByTick(
+          this.world.tick - 3,
+          this.world.tick,
+        );
+        return {
+          entity: e,
+          worldTick: this.world.tick,
+          ambientPool: snapshot.ambientPool,
+          aliveEntities: snapshot.entities,
+          recentEvents,
+        };
+      }
+
+      if (parts[3] === "memory") {
+        return this.world.ledger.graph.getEntityHistory(id);
+      }
+
+      if (parts[3] === "plan") {
+        return this.world.getAvailableActions(id);
+      }
+
       return e;
     }
 

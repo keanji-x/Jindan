@@ -1,18 +1,11 @@
 #!/usr/bin/env node
 // ============================================================
-// Jindan CLI — v2: all action info from ActionRegistry
+// Jindan AI CLI — ReAct / OODA Oriented Agent Interface
 // ============================================================
 
 import { parseArgs } from "node:util";
-import { type ActionDef, ActionRegistry } from "@jindan/core";
+import type { ActionId } from "@jindan/core";
 import { ApiClient } from "./ApiClient.js";
-import {
-  formatActionResult,
-  formatEntities,
-  formatEntity,
-  formatLeaderboard,
-  formatWorld,
-} from "./format.js";
 
 const { values, positionals } = parseArgs({
   allowPositionals: true,
@@ -22,56 +15,20 @@ const { values, positionals } = parseArgs({
     name: { type: "string", short: "n" },
     species: { type: "string", short: "s" },
     target: { type: "string", short: "t" },
-    json: { type: "boolean", default: false },
   },
 });
 
 const api = new ApiClient(values.host!);
 const command = positionals[0];
-const jsonMode = values.json!;
 
-function output(data: unknown, formatter?: (d: never) => string) {
-  if (jsonMode || !formatter) {
-    console.log(JSON.stringify(data, null, 2));
-  } else {
-    console.log(formatter(data as never));
-  }
+function toJSON(data: unknown) {
+  console.log(JSON.stringify(data, null, 2));
 }
 
 async function main() {
   try {
     switch (command) {
-      // ── 信息查询 ──────────────────────────────────────
-      case "world":
-      case "status": {
-        const world = await api.getWorldStatus();
-        output(world, formatWorld);
-        break;
-      }
-
-      case "info": {
-        const id = values.id ?? positionals[1];
-        if (!id) throw usageError("info --id <id>", "查看生灵详细信息");
-        const e = await api.getEntity(id);
-        output(e, formatEntity);
-        break;
-      }
-
-      case "entities":
-      case "list": {
-        const entities = await api.getEntities();
-        output(entities, formatEntities);
-        break;
-      }
-
-      case "leaderboard":
-      case "rank": {
-        const lb = await api.getLeaderboard();
-        output(lb, formatLeaderboard);
-        break;
-      }
-
-      // ── 创建生灵 ──────────────────────────────────────
+      // ── 创建 (For Agent Initialization) ────────────────
       case "create": {
         const name = values.name ?? positionals[1];
         const species = (values.species ?? positionals[2] ?? "human") as
@@ -79,116 +36,74 @@ async function main() {
           | "beast"
           | "plant";
         if (!name)
-          throw usageError("create --name <名字> [--species human|beast|plant]", "创建一个生灵");
+          throw new Error("Usage: jindan create --name <Name> [--species human|beast|plant]");
         const e = await api.createEntity(name, species);
-        output(e, formatEntity);
-        const id = (e as Record<string, unknown>).id;
-        console.log(`\n💡 记住你的 ID: ${id}`);
-
-        // Show first available action from registry
-        const firstAction = ActionRegistry.forSpecies(species).find(
-          (a: ActionDef) => a.id !== "rest",
-        );
-        if (firstAction) {
-          console.log(`💡 下一步: jindan ${firstAction.cliCommand} -i ${id}`);
-        }
+        toJSON(e);
         break;
       }
 
-      // ── 动作: 自动路由 ────────────────────────────────
+      // ── OODA: Observe (感知) ───────────────────────────
+      case "observe": {
+        const id = values.id ?? positionals[1];
+        if (!id) throw new Error("Usage: jindan observe <id>");
+        const data = await api.getObserve(id);
+        toJSON(data);
+        break;
+      }
+
+      // ── OODA: Memory (记忆/仇恨图谱) ────────────────────
+      case "memory": {
+        const id = values.id ?? positionals[1];
+        if (!id) throw new Error("Usage: jindan memory <id>");
+        // Currently returns full history. Agents can filter target.
+        const data = await api.getMemory(id);
+        toJSON(data);
+        break;
+      }
+
+      // ── OODA: Plan (内省可用技能) ──────────────────────
+      case "plan": {
+        const id = values.id ?? positionals[1];
+        if (!id) throw new Error("Usage: jindan plan <id>");
+        const data = await api.getPlan(id);
+        toJSON(data);
+        break;
+      }
+
+      // ── OODA: Act (执行) ───────────────────────────────
+      case "act": {
+        const id = values.id ?? positionals[1];
+        const action = positionals[2] as ActionId;
+        const target = values.target ?? positionals[3];
+        if (!id || !action) throw new Error("Usage: jindan act <id> <action> [targetId]");
+
+        const r = await api.performAction(id, action, target);
+        toJSON(r);
+        break;
+      }
+
       default: {
-        // Check if command is a known action cliCommand
-        const actionDef = ActionRegistry.getAll().find((a: ActionDef) => a.cliCommand === command);
-        if (actionDef) {
-          const id = values.id ?? positionals[1];
-          if (!id)
-            throw usageError(
-              `${actionDef.cliCommand} --id <id>${actionDef.needsTarget ? " --target <tid>" : ""}`,
-              actionDef.description,
-            );
+        console.log(`
+Jindan AI Agent CLI
+===================
+Commands:
+  create    - Instantiate a new body:       jindan create --name <name> --species [human|beast|plant]
+  observe   - Perceive surrounding:         jindan observe <id>
+  memory    - Recall past interactions:     jindan memory <id>
+  plan      - List available actions:       jindan plan <id>
+  act       - Execute an action:            jindan act <id> <actionId> [targetId]
 
-          const target = actionDef.needsTarget ? (values.target ?? positionals[2]) : undefined;
-          if (actionDef.needsTarget && !target) {
-            throw usageError(
-              `${actionDef.cliCommand} --id <id> --target <targetId>`,
-              actionDef.description,
-            );
-          }
-
-          const r = await api.performAction(id, actionDef.id, target);
-          output(r, formatActionResult);
-        } else {
-          printHelp();
-        }
+Options:
+  --host    - API endpoint (default: http://localhost:3001)
+`);
         break;
       }
     }
     process.exit(0);
   } catch (err) {
-    if (err instanceof UsageError) {
-      console.error(err.message);
-    } else {
-      console.error(`❌ ${err instanceof Error ? err.message : err}`);
-    }
+    console.error(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
     process.exit(1);
   }
-}
-
-// ── Help (generated from ActionRegistry) ─────────────────
-
-function printHelp() {
-  const actions = ActionRegistry.getAll();
-
-  console.log(`
-╔═══════════════════════════════════════════════════════════╗
-║              🏔️  金丹 · 修仙世界 CLI v2  🏔️              ║
-╠═══════════════════════════════════════════════════════════╣
-║                                                           ║
-║  📖 信息查询                                              ║
-║    world / status           查看天地气象                  ║
-║    info -i <id>             查看生灵信息                  ║
-║    entities / list          查看所有生灵                  ║
-║    leaderboard / rank       排行榜                        ║
-║                                                           ║
-║  🌟 创建生灵                                              ║
-║    create -n <名字> [-s human|beast|plant]                ║
-║                                                           ║
-║  ⚡ 动作                                                  ║`);
-
-  for (const a of actions) {
-    if (a.id === "rest") continue;
-    const _targetHint = a.needsTarget ? " -t <tid>" : "";
-    const species = a.species.join("/");
-    const line = `    ${a.cliCommand.padEnd(24)}${a.cliHelp} [${species}]`;
-    console.log(`║  ${line.padEnd(56)}║`);
-  }
-
-  console.log(`║                                                           ║
-║  🔧 全局选项                                              ║
-║    --host <url>             API 地址 (默认 :3001)         ║
-║    --json                   输出原始 JSON                 ║
-║                                                           ║
-║  💡 新手指引:                                              ║
-║    1. jindan create -n "你的名字" -s human                ║
-║    2. jindan meditate -i <id>     → 吸收灵气              ║
-║    3. jindan info -i <id>         → 查看状态              ║
-║    4. jindan breakthrough -i <id> → 尝试突破!             ║
-║                                                           ║
-╚═══════════════════════════════════════════════════════════╝
-  `);
-}
-
-// ── Error Helpers ─────────────────────────────────────────
-
-class UsageError extends Error {}
-
-function usageError(usage: string, description: string): UsageError {
-  return new UsageError(
-    `❌ 参数不足\n` +
-      `   用法: jindan ${usage}\n` +
-      `   说明: ${description}\n` +
-      `   提示: 加 --json 可获得结构化输出`,
-  );
 }
 
 main();
