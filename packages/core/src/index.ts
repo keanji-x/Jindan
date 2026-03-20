@@ -11,6 +11,9 @@ export { solve, solveDrain, UNIVERSE } from "./engine/index.js";
 // Entity layer
 export type * from "./entity/index.js";
 export { ActionRegistry, createEntity, SPECIES } from "./entity/index.js";
+// Storage layer
+export type { StorageBackend } from "./storage/index.js";
+export { MemoryStorage, PgStorage } from "./storage/index.js";
 // World layer
 export type * from "./world/index.js";
 export {

@@ -1,8 +1,12 @@
 set allow-duplicate-recipes := true
 
-# 启动核心 API 服务器与 Web 界面
-start:
+# 启动核心 API 服务器（内存存储，开发用）
+start_mem:
     npm run dev:core
+
+# Docker Compose 一键启动（PostgreSQL 持久化）
+start_docker:
+    docker compose up --build
 
 # 调用 CLI，例如：just cli create -n TestPlayer -s human
 cli +args:

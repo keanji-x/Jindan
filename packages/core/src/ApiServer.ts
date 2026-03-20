@@ -11,6 +11,7 @@ import { UNIVERSE } from "./engine/index.js";
 import { AiRegistry } from "./entity/ai/AiRegistry.js";
 import type { ActionId } from "./entity/types.js";
 import { attachFileLogger } from "./logger.js";
+import type { StorageBackend } from "./storage/StorageBackend.js";
 import type { WorldEvent } from "./world/types.js";
 import { World } from "./world/World.js";
 
@@ -35,8 +36,8 @@ export class ApiServer {
   private readonly wss: WebSocketServer;
   private readonly clients = new Set<WebSocket>();
 
-  constructor(world?: World) {
-    this.world = world ?? new World();
+  constructor(options?: { world?: World; storage?: StorageBackend }) {
+    this.world = options?.world ?? new World(options?.storage);
     this.http = createServer(this.handle.bind(this));
     this.wss = new WebSocketServer({ server: this.http });
 

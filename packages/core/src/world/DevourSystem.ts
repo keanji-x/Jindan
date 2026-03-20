@@ -108,7 +108,7 @@ export const doDevour: ActionHandler = (entity, _actionId, context) => {
   loser.status = "lingering";
 
   const actualGain = result.success ? Math.abs(result.deltas[winnerTank.coreParticle] ?? 0) : 0;
-  const totalFlow = actionCost + result.totalFlow;
+  const _totalFlow = actionCost + result.totalFlow;
 
   events.emit({
     tick,
@@ -123,6 +123,18 @@ export const doDevour: ActionHandler = (entity, _actionId, context) => {
       equation: eqId,
     },
     message: `⚔️「${winner.name}」吞噬了「${loser.name}」！夺取灵气 ${actualGain}（散溢 ${Math.floor(result.totalFlow - actualGain)}）[${eq.name}]`,
+  });
+
+  events.emit({
+    tick,
+    type: "entity_died",
+    data: {
+      id: loser.id,
+      name: loser.name,
+      species: loser.species,
+      cause: `被「${winner.name}」吞噬`,
+    },
+    message: `💀「${loser.name}」被「${winner.name}」吞噬身亡`,
   });
 
   return { success: true, winner: winner.id, loser: loser.id, absorbed: actualGain };
