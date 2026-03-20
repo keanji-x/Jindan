@@ -1,9 +1,11 @@
-// ============================================================
-// StorageBackend — 持久化存储抽象接口
-// ============================================================
-
 import type { Entity } from "../entity/types.js";
 import type { LedgerEvent, QiPoolState } from "../ledger/types.js";
+
+/** 用户账户记录 */
+export interface UserRecord {
+  passwordHash: string;
+  entityIds: string[];
+}
 
 /**
  * 存储后端接口。
@@ -47,6 +49,24 @@ export interface StorageBackend {
 
   getTick(): number;
   setTick(tick: number): void;
+
+  // ── User Accounts ──────────────────────────────────────
+
+  /** 获取用户记录 */
+  getUser(username: string): UserRecord | undefined;
+  /** 保存/更新用户记录 */
+  setUser(username: string, record: UserRecord): void;
+  /** 检查用户是否存在 */
+  hasUser(username: string): boolean;
+
+  // ── Entity Secrets ─────────────────────────────────────
+
+  /** 获取 entityId 对应的 hashed secret */
+  getSecret(entityId: string): string | undefined;
+  /** 保存 entity secret (hashed) */
+  setSecret(entityId: string, hashedSecret: string): void;
+  /** 通过 hashed secret 反查 entityId */
+  getEntityIdBySecret(hashedSecret: string): string | undefined;
 
   // ── Persistence Flush ──────────────────────────────────
 

@@ -10,8 +10,13 @@ dev_web:
     npm run dev -w @jindan/web
 
 # Docker Compose 一键启动（PostgreSQL 持久化）
+# 配置：packages/core/.env (JWT_SECRET, INVITE_CODE, SITE_ADDRESS 等)
 start_docker:
     docker compose up --build
+
+# Docker Compose 后台启动
+start_docker_bg:
+    docker compose up --build -d
 
 # Docker Compose 停止并移除容器
 stop_docker:

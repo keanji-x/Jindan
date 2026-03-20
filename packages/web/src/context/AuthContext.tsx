@@ -14,6 +14,7 @@ type AuthAction =
   | { type: "LOGIN"; token: string; username: string }
   | { type: "SET_CHARACTERS"; characters: CharacterInfo[] }
   | { type: "ADD_CHARACTER"; character: CharacterInfo }
+  | { type: "REMOVE_CHARACTER"; entityId: string }
   | { type: "LOGOUT" }
   | { type: "LOADED" };
 
@@ -22,6 +23,7 @@ interface AuthContextValue extends AuthState {
   logout: () => void;
   setCharacters: (characters: CharacterInfo[]) => void;
   addCharacter: (character: CharacterInfo) => void;
+  removeCharacter: (entityId: string) => void;
 }
 
 // ── Reducer ─────────────────────────────────────────────
@@ -37,6 +39,11 @@ function reducer(state: AuthState, action: AuthAction): AuthState {
       return { ...state, characters: action.characters };
     case "ADD_CHARACTER":
       return { ...state, characters: [...state.characters, action.character] };
+    case "REMOVE_CHARACTER":
+      return {
+        ...state,
+        characters: state.characters.filter((c) => c.entityId !== action.entityId),
+      };
     case "LOGOUT":
       localStorage.removeItem(TOKEN_KEY);
       return { token: null, username: null, characters: [], loading: false };
@@ -80,6 +87,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     logout: () => dispatch({ type: "LOGOUT" }),
     setCharacters: (characters) => dispatch({ type: "SET_CHARACTERS", characters }),
     addCharacter: (character) => dispatch({ type: "ADD_CHARACTER", character }),
+    removeCharacter: (entityId) => dispatch({ type: "REMOVE_CHARACTER", entityId }),
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

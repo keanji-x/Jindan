@@ -37,7 +37,7 @@ if (!apiKey) {
   process.exit(1);
 }
 
-const api = new ApiClient(values.host!);
+const api = new ApiClient(values.host!, values.key || process.env.ENTITY_SECRET);
 const llm = new LlmClient(apiKey, baseUrl, modelName);
 const chatHandler = new ChatHandler(api, llm);
 

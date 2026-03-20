@@ -19,6 +19,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "bcryptjs": "^3.0.3",
     "dotenv": "^16.4.0",
     "jsonwebtoken": "^9.0.3",
     "nanoid": "^5.0.9",

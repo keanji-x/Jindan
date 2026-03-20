@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import CharacterPanel from "../components/CharacterPanel";
 import ChatPanel from "../components/ChatPanel";
 import WorldPanel from "../components/WorldPanel";
@@ -26,13 +27,18 @@ export default function DashboardPage() {
           <div className="p-4 border-b border-white/[0.06]">
             <div className="flex items-center justify-between">
               <span className="text-sm text-slate-400">{username}</span>
-              <button
-                type="button"
-                onClick={logout}
-                className="text-xs text-slate-500 hover:text-danger transition-colors"
-              >
-                退出
-              </button>
+              <div className="flex items-center gap-3">
+                <Link to="/config" className="text-xs text-qi hover:text-qi/80 transition-colors">
+                  配置
+                </Link>
+                <button
+                  type="button"
+                  onClick={logout}
+                  className="text-xs text-slate-500 hover:text-danger transition-colors"
+                >
+                  退出
+                </button>
+              </div>
             </div>
           </div>
           <CharacterPanel activeCharId={activeCharId} onSelect={handleSelectCharacter} />
