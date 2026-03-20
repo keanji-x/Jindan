@@ -2,15 +2,14 @@
 // MemoryStorage — 内存存储后端（原有逻辑的包装）
 // ============================================================
 
-import type { Entity } from "../entity/types.js";
-import type { LedgerEvent, QiPoolState } from "../ledger/types.js";
+import type { Entity, QiPoolState, WorldEventRecord } from "../world/types.js";
 import type { StorageBackend, UserRecord } from "./StorageBackend.js";
 
 export class MemoryStorage implements StorageBackend {
   private entities: Map<string, Entity> = new Map();
-  private events: LedgerEvent[] = [];
-  private bySource: Map<string, LedgerEvent[]> = new Map();
-  private byTarget: Map<string, LedgerEvent[]> = new Map();
+  private events: WorldEventRecord[] = [];
+  private bySource: Map<string, WorldEventRecord[]> = new Map();
+  private byTarget: Map<string, WorldEventRecord[]> = new Map();
   private qiPool: QiPoolState = { pools: {}, total: 0 };
   private tick = 0;
 
@@ -49,7 +48,7 @@ export class MemoryStorage implements StorageBackend {
 
   // ── Event Append / Query ───────────────────────────────
 
-  appendEvent(event: LedgerEvent): void {
+  appendEvent(event: WorldEventRecord): void {
     this.events.push(event);
 
     let sourceEvents = this.bySource.get(event.sourceId);
@@ -69,19 +68,19 @@ export class MemoryStorage implements StorageBackend {
     }
   }
 
-  getEventsBySource(sourceId: string): LedgerEvent[] {
+  getEventsBySource(sourceId: string): WorldEventRecord[] {
     return this.bySource.get(sourceId) || [];
   }
 
-  getEventsByTarget(targetId: string): LedgerEvent[] {
+  getEventsByTarget(targetId: string): WorldEventRecord[] {
     return this.byTarget.get(targetId) || [];
   }
 
-  getEventsByTick(startTick: number, endTick: number): LedgerEvent[] {
+  getEventsByTick(startTick: number, endTick: number): WorldEventRecord[] {
     return this.events.filter((e) => e.tick >= startTick && e.tick <= endTick);
   }
 
-  getAllEvents(): LedgerEvent[] {
+  getAllEvents(): WorldEventRecord[] {
     return this.events;
   }
 

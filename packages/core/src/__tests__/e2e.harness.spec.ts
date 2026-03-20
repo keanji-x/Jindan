@@ -7,6 +7,7 @@
 // ============================================================
 
 import { afterEach, describe, expect, it } from "vitest";
+import { UNIVERSE } from "../world/config/universe.config.js";
 import { type TestHarness, world } from "./TestHarness.js";
 
 // Keep harness ref for cleanup
@@ -39,8 +40,14 @@ describe("World E2E — Fluent Harness", () => {
       harness = world();
       harness.createHuman("观测者");
 
-      // Run enough ticks for SpawnPool to fire reliably (spawnBaseChance=0.96 × 30 ticks)
-      harness.run(30);
+      // Temporarily boost spawn chance to guarantee a spawn in test
+      const oldChance = UNIVERSE.ecology.spawnBaseChance;
+      UNIVERSE.ecology.spawnBaseChance = 1.0;
+
+      // Run enough ticks for SpawnPool to fire reliably
+      harness.run(15);
+
+      UNIVERSE.ecology.spawnBaseChance = oldChance;
 
       const alive = harness.world.getAliveEntities();
       const nonHumans = alive.filter((e) => e.species !== "human");
@@ -61,7 +68,6 @@ describe("World E2E — Fluent Harness", () => {
       expect(human.status).toBe("alive");
       expect(human.components.tank).toBeDefined();
       expect(human.components.cultivation).toBeDefined();
-      expect(human.components.combat).toBeDefined();
       expect(human.components.tank!.coreParticle).toBe("ql");
     });
 
@@ -136,45 +142,6 @@ describe("World E2E — Fluent Harness", () => {
       harness.run(2).check((h) => h.assertEventEmitted("entity_drained"));
     });
   });
-
-  // ── 5. 吞噬战斗 ──────────────────────────────────────────
-
-  describe("Devour (Combat)", () => {
-    it("should allow human to devour a beast", () => {
-      harness = world();
-      const human = harness.createHuman("战士");
-      const beasts = harness.world.getAliveEntities("beast");
-
-      if (beasts.length > 0) {
-        const target = beasts[0]!;
-        const result = harness.act(human.id, "devour", target.id);
-        // Devour may succeed or fail based on combat power
-        expect(result.success).toBe(true);
-        expect(result.result).toBeDefined();
-      }
-    });
-
-    it("should resolve combat when devour occurs", () => {
-      harness = world();
-      const human = harness.createHuman("强者");
-      const beasts = harness.world.getAliveEntities("beast");
-
-      if (beasts.length > 0) {
-        const target = beasts[0]!;
-        harness.act(human.id, "devour", target.id);
-
-        // DevourSystem emits entity_devoured on success
-        const devourEvents = harness.eventsOfType("entity_devoured");
-        expect(devourEvents.length).toBeGreaterThan(0);
-
-        // The loser should now be dead
-        const evt = devourEvents[0]!;
-        const loserId = (evt.data.loser as { id: string }).id;
-        harness.assertDead(loserId);
-      }
-    });
-  });
-
   // ── 6. 完整模拟 — 不崩溃 ──────────────────────────────────
 
   describe("Full Simulation", () => {

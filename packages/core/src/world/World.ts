@@ -1,48 +1,75 @@
 // ============================================================
-// World — thin coordinator (delegates to systems)
+// World — thin coordinator (owns all structured state)
 //
-// v3: Uses AmbientPool (multi-particle), TankComponent,
-// v4: Backed by WorldLedger (CQRS Event Sourcing foundation)
+// v5: WorldLedger dissolved. World directly owns:
+//   - Entity CRUD (via StorageBackend)
+//   - QiPoolManager (ambient qi)
+//   - EventGraph (structured event history)
 // ============================================================
 
+import { nanoid } from "nanoid";
 import { EventBus } from "../EventBus.js";
-import { BALANCE } from "../engine/balance.config.js";
-import { UNIVERSE } from "../engine/index.js";
-import { applyParams } from "../engine/TunableParams.js";
-import { doChat } from "../entity/actions/chat.js";
-import { ActionRegistry } from "../entity/actions/index.js";
-import type { ActionContext, ActionId } from "../entity/actions/types.js";
-import { createEntity } from "../entity/factory.js";
-import { SPECIES } from "../entity/index.js";
-import type { Entity, Life, SpeciesType } from "../entity/types.js";
-import { type EntityHistory, type LedgerEventType, WorldLedger } from "../ledger/index.js";
+import { MemoryStorage } from "../storage/MemoryStorage.js";
 import type { StorageBackend } from "../storage/StorageBackend.js";
-import { doAbsorb } from "./AbsorbSystem.js";
-import { doBreakthrough } from "./BreakthroughSystem.js";
-import { doDevour } from "./DevourSystem.js";
-import { drainAll } from "./qi/index.js";
-import { runSpawnPool } from "./qi/SpawnPool.js";
-import type { ActionResult, AvailableAction, WorldEvent } from "./types.js";
+import { BALANCE } from "./config/balance.config.js";
+import { applyParams } from "./config/TunableParams.js";
+import { UNIVERSE } from "./config/universe.config.js";
+import { EventGraph } from "./EventGraph.js";
+import { createEntity } from "./factory.js";
+import { Formatters } from "./formatters.js";
+import { QiPoolManager } from "./QiPoolManager.js";
+import { ParticleTransfer } from "./reactor/ParticleTransfer.js";
+import { ActionRegistry } from "./systems/ActionRegistry.js";
+import { AbsorbSystem } from "./systems/absorb/index.js";
+import { BreakthroughSystem } from "./systems/breakthrough/index.js";
+import { ChatSystem } from "./systems/chat/index.js";
+import { DevourSystem } from "./systems/devour/index.js";
+import { DrainSystem } from "./systems/drain/index.js";
+import { RestSystem } from "./systems/rest/index.js";
+import { SpawnSystem } from "./systems/spawn/index.js";
+import type { ActionContext, CanExecuteContext } from "./systems/types.js";
+import type {
+  ActionId,
+  ActionResult,
+  AvailableAction,
+  Entity,
+  EntityHistory,
+  SpeciesType,
+  WorldEvent,
+  WorldEventRecord,
+  WorldEventRecordType,
+} from "./types.js";
 
 export class World {
   readonly events = new EventBus();
-  public readonly ledger: WorldLedger;
+  public readonly storage: StorageBackend;
+  public readonly qiPool: QiPoolManager;
+  public readonly eventGraph: EventGraph;
   private _tick: number = 0;
 
   constructor(storage?: StorageBackend) {
     // Apply SA-optimized balance params
     applyParams(BALANCE);
 
-    this.ledger = new WorldLedger(storage);
-    this.registerHandlers();
+    this.storage = storage ?? new MemoryStorage();
+
+    // Use SA-tunable totalParticles as the initial ambient qi base
+    // SpawnPool will organically generate life from this ambient qi
+    this.qiPool = new QiPoolManager(
+      UNIVERSE.totalParticles,
+      UNIVERSE.particles as { id: string }[],
+      this.storage,
+    );
+    this.eventGraph = new EventGraph(this.storage, UNIVERSE.ledgerWindowSize);
+
+    this.registerSystems();
 
     // Restore tick from persisted storage
     if (storage) {
       this._tick = storage.getTick();
     }
 
-    // Ledger intercepter: convert WorldEvents into LedgerEvents
-    // This is the first step towards CQRS: recording the events into the Graph.
+    // Event interceptor: convert WorldEvents into WorldEventRecords
     this.events.onAny((event) => {
       let sourceId = "WORLD";
       let targetId: string | undefined;
@@ -55,44 +82,74 @@ export class World {
       if (event.data.loser) targetId = (event.data.loser as { id: string }).id;
       else if (event.data.target) targetId = (event.data.target as { id: string }).id;
 
-      const recorded = this.ledger.recordEvent({
+      const recorded = this.recordEvent({
         tick: event.tick,
         sourceId,
         targetId,
-        type: event.type as unknown as LedgerEventType,
+        type: event.type as unknown as WorldEventRecordType,
         data: event.data,
       });
 
       // Track event ID in entity's life.events (skip entombed entities)
-      const srcEntity = this.ledger.getEntity(sourceId);
+      const srcEntity = this.getEntity(sourceId);
       if (srcEntity && srcEntity.status !== "entombed") srcEntity.life.events.push(recorded.id);
       if (targetId) {
-        const tgtEntity = this.ledger.getEntity(targetId);
+        const tgtEntity = this.getEntity(targetId);
         if (tgtEntity && tgtEntity.status !== "entombed") tgtEntity.life.events.push(recorded.id);
       }
     });
   }
 
-  private registerHandlers() {
-    ActionRegistry.registerHandler("meditate", doAbsorb);
-    ActionRegistry.registerHandler("moonlight", doAbsorb);
-    ActionRegistry.registerHandler("photosynth", doAbsorb);
-    ActionRegistry.registerHandler("devour", doDevour);
-    ActionRegistry.registerHandler("breakthrough", doBreakthrough);
-    ActionRegistry.registerHandler("chat", doChat);
-    ActionRegistry.registerHandler("rest", (entity, _actionId, ctx) => {
-      const { actionCost, ambientPool } = ctx;
-      const tankComp = entity.components.tank;
-      if (!tankComp) return { success: false, reason: "实体没有粒子储罐" };
+  private registerSystems() {
+    ActionRegistry.registerSystem(AbsorbSystem);
+    ActionRegistry.registerSystem(BreakthroughSystem);
+    ActionRegistry.registerSystem(DevourSystem);
+    ActionRegistry.registerSystem(RestSystem);
+    ActionRegistry.registerSystem(ChatSystem);
+    ActionRegistry.registerSystem(DrainSystem);
+    ActionRegistry.registerSystem(SpawnSystem);
+  }
 
-      const core = tankComp.coreParticle;
-      if ((tankComp.tanks[core] ?? 0) <= actionCost) {
-        return { success: false, reason: "灵气不足以执行休息" };
-      }
-      tankComp.tanks[core] = (tankComp.tanks[core] ?? 0) - actionCost;
-      ambientPool.pools[core] = (ambientPool.pools[core] ?? 0) + actionCost;
-      return { success: true, rested: true, actionCost };
-    });
+  // ── Entity Management (direct storage delegation) ──────
+
+  getEntity(id: string): Entity | undefined {
+    return this.storage.getEntity(id);
+  }
+
+  setEntity(entity: Entity) {
+    this.storage.setEntity(entity);
+  }
+
+  getAllEntities(): Entity[] {
+    return this.storage.getAllEntities();
+  }
+
+  getAliveEntities(species?: SpeciesType): Entity[] {
+    const all = this.storage.getAllEntities().filter((e) => e.status === "alive");
+    return species ? all.filter((e) => e.species === species) : all;
+  }
+
+  /** 获取所有已死的有灵智实体 (lingering + entombed) */
+  getDeadEntities(): Entity[] {
+    return this.storage
+      .getAllEntities()
+      .filter((e) => e.sentient && (e.status === "lingering" || e.status === "entombed"));
+  }
+
+  removeEntity(id: string) {
+    this.storage.removeEntity(id);
+  }
+
+  // ── Event Recording ────────────────────────────────────
+
+  /** 产生一笔新事件记录，写入事件图谱 */
+  recordEvent(event: Omit<WorldEventRecord, "id">): WorldEventRecord {
+    const fullEvent: WorldEventRecord = {
+      ...event,
+      id: nanoid(),
+    };
+    this.eventGraph.append(fullEvent);
+    return fullEvent;
   }
 
   // ── Getters ──────────────────────────────────────────────
@@ -101,26 +158,10 @@ export class World {
     return this._tick;
   }
 
-  getEntity(id: string): Entity | undefined {
-    return this.ledger.getEntity(id);
-  }
-
-  getAliveEntities(species?: SpeciesType): Entity[] {
-    const all = this.ledger.getAliveEntities();
-    return species ? all.filter((e) => e.species === species) : all;
-  }
-
-  /** 获取所有已死的有灵智实体 (lingering + entombed) */
-  getDeadEntities(): Entity[] {
-    return this.ledger
-      .getAllEntities()
-      .filter((e) => e.sentient && (e.status === "lingering" || e.status === "entombed"));
-  }
-
   getSnapshot() {
     return {
       tick: this._tick,
-      ambientPool: { ...this.ledger.qiPool.state, pools: { ...this.ledger.qiPool.state.pools } },
+      ambientPool: { ...this.qiPool.state, pools: { ...this.qiPool.state.pools } },
       entities: this.getAliveEntities(),
     };
   }
@@ -128,18 +169,16 @@ export class World {
   // ── Entity Creation ──────────────────────────────────────
 
   createEntity(name: string, species: SpeciesType): Entity {
-    const entity = createEntity(name, species, this.ledger.qiPool.state);
-    this.ledger.setEntity(entity);
+    const entity = createEntity(name, species, this.qiPool.state);
+    this.setEntity(entity);
 
-    const reactor = UNIVERSE.reactors[species];
-    const displayName = reactor?.name ?? species;
     const coreCurrent = entity.components.tank?.tanks[entity.components.tank.coreParticle] ?? 0;
 
     this.events.emit({
       tick: this._tick,
       type: "entity_created",
       data: { entity: { ...entity } },
-      message: `${displayName}「${name}」现世！灵气 ${coreCurrent}`,
+      message: Formatters.entityCreated(entity, coreCurrent),
     });
 
     return entity;
@@ -157,7 +196,7 @@ export class World {
     const unsub = this.events.onAny((e) => tickEvents.push(e));
 
     try {
-      const entity = this.ledger.getEntity(entityId);
+      const entity = this.getEntity(entityId);
       if (!entity || entity.status !== "alive") {
         return this.fail("生灵不存在或已消亡", tickEvents);
       }
@@ -167,7 +206,7 @@ export class World {
         return this.fail(`未知行动: ${action}`, tickEvents);
       }
       if (!actionDef.species.includes(entity.species)) {
-        const speciesName = SPECIES[entity.species]?.name ?? entity.species;
+        const speciesName = UNIVERSE.reactors[entity.species]?.name ?? entity.species;
         return this.fail(`${speciesName}无法执行「${actionDef.name}」`, tickEvents);
       }
 
@@ -177,9 +216,18 @@ export class World {
       }
 
       const cost = actionDef.qiCost;
+      const tankComp = entity.components.tank;
+
+      // Deduct action cost
+      if (tankComp && cost > 0) {
+        ParticleTransfer.transfer(tankComp.tanks, this.qiPool.state.pools, {
+          [tankComp.coreParticle]: cost,
+        });
+      }
+
       const ctx: ActionContext = {
         actionCost: cost,
-        ambientPool: this.ledger.qiPool.state,
+        ambientPool: this.qiPool.state,
         tick: this._tick,
         events: this.events,
         payload,
@@ -188,13 +236,23 @@ export class World {
       let target: Entity | undefined;
       if (actionDef.needsTarget) {
         if (!targetId) return this.fail(`${actionDef.name}需要指定目标`, tickEvents);
-        target = this.ledger.getEntity(targetId);
+        target = this.getEntity(targetId);
         if (!target || target.status !== "alive")
           return this.fail("目标不存在或已消亡", tickEvents);
         ctx.target = target;
       }
 
       const result = handler(entity, action, ctx);
+
+      // If action failed, refund the cost
+      if (!result.success && tankComp && cost > 0) {
+        ParticleTransfer.transfer(this.qiPool.state.pools, tankComp.tanks, {
+          [tankComp.coreParticle]: cost,
+        });
+      }
+
+      // Centralized Death / Lifecycle Check
+      this.checkLifecycle();
 
       // If handler itself failed, propagate failure
       if (!result.success) {
@@ -204,7 +262,7 @@ export class World {
           result,
           events: tickEvents,
           error: (result.reason as string) ?? "行动执行失败",
-          recentEvents: this.ledger.graph.getRecentForEntity(entityId),
+          recentEvents: this.eventGraph.getRecentForEntity(entityId),
           availableActions: entity.status === "alive" ? this.getAvailableActions(entityId) : [],
         };
       }
@@ -214,7 +272,7 @@ export class World {
         tick: this._tick,
         result,
         events: tickEvents,
-        recentEvents: this.ledger.graph.getRecentForEntity(entityId),
+        recentEvents: this.eventGraph.getRecentForEntity(entityId),
         availableActions: entity.status === "alive" ? this.getAvailableActions(entityId) : [],
       };
     } finally {
@@ -234,39 +292,46 @@ export class World {
 
   private advanceTick(): void {
     this._tick += 1;
-    this.ledger.storage.setTick(this._tick);
+    this.storage.setTick(this._tick);
     const aliveEntities = this.getAliveEntities();
 
-    // 1. 结算固有消耗 (气血流失)
-    drainAll(aliveEntities, this.ledger.qiPool.state, this._tick, this.events);
+    // 1. 结算所有被动法则系统 (替换旧有的 drainAll 与 runSpawnPool)
+    const tickCtx = {
+      tick: this._tick,
+      entities: aliveEntities,
+      ambientPool: this.qiPool.state,
+      events: this.events,
+      addEntity: (e: Entity) => this.setEntity(e),
+    };
+
+    for (const sys of ActionRegistry.getSystems()) {
+      sys.onTick?.(tickCtx);
+    }
+
+    // 1.5 被动系统结算后的生命周期检查
+    this.checkLifecycle();
 
     // 2. 动态容量结算与虚空放逐 (防刷核心机制)
     const eco = UNIVERSE.ecology;
     let maxCap = eco.baseAmbientCap;
     for (const e of aliveEntities) {
-      if (e.species === "human") maxCap += eco.ambientCapPerHuman;
-      else if (e.species === "beast") maxCap += eco.ambientCapPerBeast;
-      else if (e.species === "plant") maxCap += eco.ambientCapPerPlant;
+      const reactor = UNIVERSE.reactors[e.species];
+      maxCap += reactor?.ambientCapContribution ?? 0;
     }
-    const ambient = this.ledger.qiPool.state;
+    const ambient = this.qiPool.state;
     if ((ambient.pools.ql ?? 0) > maxCap) ambient.pools.ql = maxCap;
     if ((ambient.pools.qs ?? 0) > maxCap) ambient.pools.qs = maxCap;
-
-    // 3. 后台 AI (原生行为树) 现已转为 Actor 模型，由外部 (如 ApiServer) 定时驱动。
-
-    // 4. 化生池：天地灵蕴自发凝聚为新生命
-    const { spawned } = runSpawnPool(ambient, aliveEntities, this.events, this._tick);
-    for (const e of spawned) this.ledger.setEntity(e);
 
     this.events.emit({
       tick: this._tick,
       type: "tick_complete",
       data: this.getSnapshot(),
-      message: `--- 第 ${this._tick} 天结束 ---`,
+      message: Formatters.tickComplete(this._tick),
     });
 
     // Flush dirty state to persistent storage
-    this.ledger.flush().catch((err) => {
+    this.storage.setQiPoolState(this.qiPool.state);
+    this.storage.flush().catch((err) => {
       console.error("[World] 持久化 flush 失败:", err);
     });
   }
@@ -274,7 +339,7 @@ export class World {
   // ── Helpers ──────────────────────────────────────────────
 
   getAvailableActions(entityId: string, maxSamples: number = 16): AvailableAction[] {
-    const entity = this.ledger.getEntity(entityId);
+    const entity = this.getEntity(entityId);
     if (!entity || entity.status !== "alive") return [];
 
     const speciesActions = ActionRegistry.forSpecies(entity.species);
@@ -284,16 +349,9 @@ export class World {
     for (const def of speciesActions) {
       const check = this.canAct(entity, def);
       if (!check.ok) {
-        let desc = def.name;
-        if (def.id === "breakthrough") {
-          const cultComp = entity.components.cultivation;
-          const tankComp = entity.components.tank;
-          if (cultComp && tankComp) {
-            const core = tankComp.coreParticle;
-            const ratio = (tankComp.tanks[core] ?? 0) / (tankComp.maxTanks[core] ?? 1);
-            desc = `${def.name} (${Math.floor(ratio * 100)}%)`;
-          }
-        }
+        // Use ActionDef.showProgress if available (e.g. breakthrough percentage)
+        const progress = def.showProgress?.(entity);
+        const desc = progress ? `${def.name} (${progress})` : def.name;
         allOptions.push({
           action: def.id as ActionId,
           description: desc,
@@ -304,10 +362,10 @@ export class World {
       }
 
       if (def.needsTarget) {
-        // NPC (has brain) should not auto-target players (no brain) for devour
+        // Use ActionDef.npcTargetFilter to decide target list
         const isNpc = !!entity.components.brain;
         const targets =
-          isNpc && def.id === "devour"
+          isNpc && def.npcTargetFilter === "npc-only"
             ? aliveTargets.filter((t) => !!t.components.brain)
             : aliveTargets;
 
@@ -320,9 +378,8 @@ export class World {
           });
         }
       } else {
-        let desc = def.name;
-        if (def.id === "breakthrough") desc = `${def.name} (Ready!)`;
-
+        const progress = def.showProgress?.(entity);
+        const desc = progress ? `${def.name} (${progress})` : def.name;
         allOptions.push({
           action: def.id as ActionId,
           description: desc,
@@ -341,31 +398,38 @@ export class World {
     return [...sampled, ...impossibleActions];
   }
 
+  /** 通用前置条件校验 — 灵气检查 + 委托 ActionDef.canExecute */
   private canAct(
     entity: Entity,
-    def: { id: string; qiCost: number; needsTarget: boolean },
+    def: {
+      id: string;
+      qiCost: number;
+      canExecute?: (entity: Entity, ctx: CanExecuteContext) => { ok: boolean; reason?: string };
+    },
   ): { ok: boolean; reason?: string } {
     const tankComp = entity.components.tank;
     if (!tankComp) return { ok: false, reason: "无粒子储罐" };
     const core = tankComp.coreParticle;
     if ((tankComp.tanks[core] ?? 0) < def.qiCost) return { ok: false, reason: "灵气不足" };
 
-    if (
-      def.id === "devour" &&
-      this.getAliveEntities().filter((e) => e.id !== entity.id).length === 0
-    ) {
-      return { ok: false, reason: "没有可吞噬的目标" };
-    }
-
-    if (def.id === "breakthrough") {
-      const cultComp = entity.components.cultivation;
-      if (!cultComp) return { ok: false, reason: "没有修为系统" };
-      const bt = UNIVERSE.breakthrough;
-      const coreRatio = (tankComp.tanks[core] ?? 0) / (tankComp.maxTanks[core] ?? 1);
-      if (coreRatio < bt.minQiRatio) return { ok: false, reason: "灵气未臻圆满" };
-      if (cultComp.realm >= 10) return { ok: false, reason: "已是最高境界" };
+    // Delegate to action-specific precondition if defined
+    if (def.canExecute) {
+      return def.canExecute(entity, this);
     }
     return { ok: true };
+  }
+
+  /** 集中式生命周期检查 — 粒子归零则标记为濒死 */
+  private checkLifecycle(): void {
+    for (const e of this.getAliveEntities()) {
+      const eTank = e.components.tank;
+      if (eTank) {
+        const eCore = eTank.coreParticle;
+        if ((eTank.tanks[eCore] ?? 0) <= 0) {
+          e.status = "lingering";
+        }
+      }
+    }
   }
 
   private fail<T = unknown>(
@@ -377,7 +441,7 @@ export class World {
       success: false,
       tick: this._tick,
       events,
-      recentEvents: entityId ? this.ledger.graph.getRecentForEntity(entityId) : [],
+      recentEvents: entityId ? this.eventGraph.getRecentForEntity(entityId) : [],
       availableActions: [],
       error,
     };
@@ -386,8 +450,10 @@ export class World {
   // ── 坟墓系统 (Tomb System) ─────────────────────────────
 
   /** 查询生灵的生死状态与生平 */
-  getLifeStatus(entityId: string): { status: string; life: Life } | undefined {
-    const entity = this.ledger.getEntity(entityId);
+  getLifeStatus(
+    entityId: string,
+  ): { status: string; life: import("../memory/types.js").Life } | undefined {
+    const entity = this.getEntity(entityId);
     if (!entity) return undefined;
     return { status: entity.status, life: entity.life };
   }
@@ -405,14 +471,14 @@ export class World {
     snapshot?: { events: string[]; history: EntityHistory };
     error?: string;
   } {
-    const entity = this.ledger.getEntity(entityId);
+    const entity = this.getEntity(entityId);
     if (!entity) return { success: false, error: "实体不存在" };
     if (entity.status !== "lingering") {
       return { success: false, error: `实体状态为「${entity.status}」，只有游魂才能盖棺定论` };
     }
 
     // 1. Snapshot: pull all events from this life
-    const history = this.ledger.graph.getEntityHistory(entityId);
+    const history = this.eventGraph.getEntityHistory(entityId);
     const allLifeEvents = entity.life.events;
 
     // 2. Build epitaph
@@ -450,7 +516,7 @@ export class World {
         entity: { id: entity.id, name: entity.name, species: entity.species },
         epitaph,
       },
-      message: `🪦「${entity.name}」盖棺定论，魂归安息`,
+      message: Formatters.entityTomb(entity),
     });
 
     return {
@@ -469,7 +535,7 @@ export class World {
     newName: string,
     newSpecies: SpeciesType,
   ): { success: boolean; entity?: Entity; error?: string } {
-    const entity = this.ledger.getEntity(entityId);
+    const entity = this.getEntity(entityId);
     if (!entity) return { success: false, error: "实体不存在" };
     if (entity.status !== "entombed") {
       return { success: false, error: `实体状态为「${entity.status}」，只有安息者才能转生` };
@@ -480,7 +546,7 @@ export class World {
     const pastArticle = entity.life.article;
 
     // 用 factory 创建一个临时蓝图获取初始组件数据
-    const blueprint = createEntity(newName, newSpecies, this.ledger.qiPool.state);
+    const blueprint = createEntity(newName, newSpecies, this.qiPool.state);
 
     // 原地重置：保留 id 和 soulId，重置一切其他属性
     entity.name = newName;
@@ -501,9 +567,17 @@ export class World {
         newEntity: { id: entity.id, name: newName, species: newSpecies },
         articleLength: pastArticle.length,
       },
-      message: `🔄「${oldName}」转生为「${newName}」，携带前世记忆（${pastArticle.length}字）`,
+      message: Formatters.entityReincarnated(oldName, newName, pastArticle.length),
     });
 
     return { success: true, entity };
+  }
+
+  // ── Persistence ────────────────────────────────────────
+
+  /** 将当前状态刷写到持久化存储 */
+  async flush(): Promise<void> {
+    this.storage.setQiPoolState(this.qiPool.state);
+    await this.storage.flush();
   }
 }

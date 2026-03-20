@@ -5,8 +5,7 @@
 // flush() 时批量 UPSERT 到 PG。启动时从 PG 加载已有数据到内存。
 // ============================================================
 
-import type { Entity } from "../entity/types.js";
-import type { LedgerEvent, QiPoolState } from "../ledger/types.js";
+import type { Entity, QiPoolState, WorldEventRecord } from "../world/types.js";
 import type { StorageBackend, UserRecord } from "./StorageBackend.js";
 
 // Dynamic import to avoid hard dependency when using MemoryStorage
@@ -25,9 +24,9 @@ export class PgStorage implements StorageBackend {
 
   // In-memory caches (same as MemoryStorage, flushed to PG periodically)
   private entities: Map<string, Entity> = new Map();
-  private events: LedgerEvent[] = [];
-  private bySource: Map<string, LedgerEvent[]> = new Map();
-  private byTarget: Map<string, LedgerEvent[]> = new Map();
+  private events: WorldEventRecord[] = [];
+  private bySource: Map<string, WorldEventRecord[]> = new Map();
+  private byTarget: Map<string, WorldEventRecord[]> = new Map();
   private qiPool: QiPoolState = { pools: {}, total: 0 };
   private tick = 0;
 
@@ -38,7 +37,7 @@ export class PgStorage implements StorageBackend {
 
   // Dirty tracking for efficient flush
   private dirtyEntities: Set<string> = new Set();
-  private newEvents: LedgerEvent[] = [];
+  private newEvents: WorldEventRecord[] = [];
   private qiPoolDirty = false;
   private tickDirty = false;
   private dirtyUsers: Set<string> = new Set();
@@ -147,7 +146,7 @@ export class PgStorage implements StorageBackend {
 
   // ── Event Append / Query ───────────────────────────────
 
-  appendEvent(event: LedgerEvent): void {
+  appendEvent(event: WorldEventRecord): void {
     this.events.push(event);
     this.newEvents.push(event);
 
@@ -168,19 +167,19 @@ export class PgStorage implements StorageBackend {
     }
   }
 
-  getEventsBySource(sourceId: string): LedgerEvent[] {
+  getEventsBySource(sourceId: string): WorldEventRecord[] {
     return this.bySource.get(sourceId) || [];
   }
 
-  getEventsByTarget(targetId: string): LedgerEvent[] {
+  getEventsByTarget(targetId: string): WorldEventRecord[] {
     return this.byTarget.get(targetId) || [];
   }
 
-  getEventsByTick(startTick: number, endTick: number): LedgerEvent[] {
+  getEventsByTick(startTick: number, endTick: number): WorldEventRecord[] {
     return this.events.filter((e) => e.tick >= startTick && e.tick <= endTick);
   }
 
-  getAllEvents(): LedgerEvent[] {
+  getAllEvents(): WorldEventRecord[] {
     return this.events;
   }
 
@@ -406,7 +405,7 @@ export class PgStorage implements StorageBackend {
       "SELECT * FROM events ORDER BY tick, created_at",
     );
     for (const row of eventRows) {
-      const event: LedgerEvent = {
+      const event: WorldEventRecord = {
         id: row.id,
         tick: row.tick,
         sourceId: row.source_id,

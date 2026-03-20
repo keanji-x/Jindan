@@ -8,9 +8,7 @@ describe("Player Survival", () => {
     const pid = player.id;
 
     console.log(`\n── Player Death Trace ──`);
-    console.log(
-      `  Player: ${player.name} id=${pid} qi=100/100 power=${player.components.combat?.power}`,
-    );
+    console.log(`  Player: ${player.name} id=${pid} qi=100/100`);
 
     // Log all events involving the player
     h.world.events.onAny((e) => {

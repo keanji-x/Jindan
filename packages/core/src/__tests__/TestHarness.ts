@@ -6,10 +6,14 @@
 //   2. Headless AI explore: const h = world(); h.run(); h.act(...)
 // ============================================================
 
-import type { ActionId } from "../entity/actions/types.js";
-import { AiRegistry } from "../entity/ai/AiRegistry.js";
-import type { Entity } from "../entity/types.js";
-import type { ActionResult, AvailableAction, WorldEvent } from "../world/types.js";
+import { AiRegistry } from "../world/ai/AiRegistry.js";
+import type {
+  ActionId,
+  ActionResult,
+  AvailableAction,
+  Entity,
+  WorldEvent,
+} from "../world/types.js";
 import { World } from "../world/World.js";
 
 // ── Types ────────────────────────────────────────────────────
