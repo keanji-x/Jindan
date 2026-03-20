@@ -1,0 +1,138 @@
+// ============================================================
+// MemoryStorage — 内存存储后端（原有逻辑的包装）
+// ============================================================
+
+import type { Entity } from "../entity/types.js";
+import type { LedgerEvent, QiPoolState } from "../ledger/types.js";
+import type { StorageBackend } from "./StorageBackend.js";
+
+export class MemoryStorage implements StorageBackend {
+  private entities: Map<string, Entity> = new Map();
+  private events: LedgerEvent[] = [];
+  private bySource: Map<string, LedgerEvent[]> = new Map();
+  private byTarget: Map<string, LedgerEvent[]> = new Map();
+  private qiPool: QiPoolState = { pools: {}, total: 0 };
+  private tick = 0;
+
+  // ── Lifecycle ──────────────────────────────────────────
+
+  async init(): Promise<void> {
+    // No-op for memory backend
+  }
+
+  async close(): Promise<void> {
+    // No-op for memory backend
+  }
+
+  // ── Entity CRUD ────────────────────────────────────────
+
+  getEntity(id: string): Entity | undefined {
+    return this.entities.get(id);
+  }
+
+  setEntity(entity: Entity): void {
+    this.entities.set(entity.id, entity);
+  }
+
+  getAllEntities(): Entity[] {
+    return Array.from(this.entities.values());
+  }
+
+  removeEntity(id: string): void {
+    this.entities.delete(id);
+  }
+
+  // ── Event Append / Query ───────────────────────────────
+
+  appendEvent(event: LedgerEvent): void {
+    this.events.push(event);
+
+    let sourceEvents = this.bySource.get(event.sourceId);
+    if (!sourceEvents) {
+      sourceEvents = [];
+      this.bySource.set(event.sourceId, sourceEvents);
+    }
+    sourceEvents.push(event);
+
+    if (event.targetId) {
+      let targetEvents = this.byTarget.get(event.targetId);
+      if (!targetEvents) {
+        targetEvents = [];
+        this.byTarget.set(event.targetId, targetEvents);
+      }
+      targetEvents.push(event);
+    }
+  }
+
+  getEventsBySource(sourceId: string): LedgerEvent[] {
+    return this.bySource.get(sourceId) || [];
+  }
+
+  getEventsByTarget(targetId: string): LedgerEvent[] {
+    return this.byTarget.get(targetId) || [];
+  }
+
+  getEventsByTick(startTick: number, endTick: number): LedgerEvent[] {
+    return this.events.filter((e) => e.tick >= startTick && e.tick <= endTick);
+  }
+
+  getAllEvents(): LedgerEvent[] {
+    return this.events;
+  }
+
+  getEventCount(): number {
+    return this.events.length;
+  }
+
+  compactEvents(keepCount: number): void {
+    this.events = this.events.slice(-keepCount);
+
+    // Rebuild indexes
+    this.bySource.clear();
+    this.byTarget.clear();
+
+    for (const event of this.events) {
+      let sourceEvents = this.bySource.get(event.sourceId);
+      if (!sourceEvents) {
+        sourceEvents = [];
+        this.bySource.set(event.sourceId, sourceEvents);
+      }
+      sourceEvents.push(event);
+
+      if (event.targetId) {
+        let targetEvents = this.byTarget.get(event.targetId);
+        if (!targetEvents) {
+          targetEvents = [];
+          this.byTarget.set(event.targetId, targetEvents);
+        }
+        targetEvents.push(event);
+      }
+    }
+  }
+
+  // ── QiPool ─────────────────────────────────────────────
+
+  getQiPoolState(): QiPoolState {
+    return this.qiPool;
+  }
+
+  setQiPoolState(state: QiPoolState): void {
+    this.qiPool = state;
+  }
+
+  // ── Tick ────────────────────────────────────────────────
+
+  getTick(): number {
+    return this.tick;
+  }
+
+  setTick(tick: number): void {
+    this.tick = tick;
+  }
+
+  // ── Persistence Flush ──────────────────────────────────
+
+  async flush(): Promise<void> {
+    // No-op for memory backend
+  }
+}

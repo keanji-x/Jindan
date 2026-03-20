@@ -80,7 +80,9 @@ function connect() {
   };
 
   ws.onclose = (e) => {
-    console.log(`[WS] ❌ Closed (code=${e.code}, reason=${e.reason}), retry in ${reconnectDelay}ms`);
+    console.log(
+      `[WS] ❌ Closed (code=${e.code}, reason=${e.reason}), retry in ${reconnectDelay}ms`,
+    );
     state.connected = false;
     updateConnectionStatus();
     reconnectTimer = setTimeout(connect, reconnectDelay);

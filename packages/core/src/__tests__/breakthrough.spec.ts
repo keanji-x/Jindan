@@ -12,6 +12,7 @@ import type { WorldEvent } from "../world/types.js";
 function makeHuman(qi: number, maxQi = 200, realm = 1): Entity {
   return {
     id: "test_human",
+    soulId: "test_soul",
     name: "测试员",
     species: "human",
     status: "alive" as const,

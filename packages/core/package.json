@@ -19,15 +19,15 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "better-sqlite3": "^11.7.0",
     "nanoid": "^5.0.9",
+    "pg": "^8.20.0",
     "winston": "^3.19.0",
     "winston-daily-rotate-file": "^5.0.0",
     "ws": "^8.18.0"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "^7.6.12",
     "@types/node": "^22.10.0",
+    "@types/pg": "^8.18.0",
     "@types/ws": "^8.5.13",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0",

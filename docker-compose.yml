@@ -1,0 +1,47 @@
+# ============================================================
+# Jindan — 修仙世界模拟器 Docker Compose
+# 一键部署：PostgreSQL + Core API Server
+# ============================================================
+
+services:
+  # ── PostgreSQL 数据库 ────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: jindan
+      POSTGRES_USER: jindan
+      POSTGRES_PASSWORD: jindan_secret
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U jindan -d jindan"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ── 金丹世界 API 服务器 ──────────────────────────────────
+  core:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      PORT: "3001"
+      DATABASE_URL: "postgresql://jindan:jindan_secret@postgres:5432/jindan"
+      # OpenAI API config — 从 .env 文件或主机环境变量注入
+      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+      OPENAI_BASE_URL: "${OPENAI_BASE_URL:-https://api.openai.com/v1}"
+      OPENAI_MODEL: "${OPENAI_MODEL:-gpt-4o-mini}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./logs:/app/logs
+
+volumes:
+  pgdata:

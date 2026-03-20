@@ -16,6 +16,7 @@ import { createEntity } from "../entity/factory.js";
 import { SPECIES } from "../entity/index.js";
 import type { Entity, Life, SpeciesType } from "../entity/types.js";
 import { type EntityHistory, type LedgerEventType, WorldLedger } from "../ledger/index.js";
+import type { StorageBackend } from "../storage/StorageBackend.js";
 import { doAbsorb } from "./AbsorbSystem.js";
 import { doBreakthrough } from "./BreakthroughSystem.js";
 import { doDevour } from "./DevourSystem.js";
@@ -28,12 +29,17 @@ export class World {
   public readonly ledger: WorldLedger;
   private _tick: number = 0;
 
-  constructor() {
+  constructor(storage?: StorageBackend) {
     // Apply SA-optimized balance params
     applyParams(BALANCE);
 
-    this.ledger = new WorldLedger();
+    this.ledger = new WorldLedger(storage);
     this.registerHandlers();
+
+    // Restore tick from persisted storage
+    if (storage) {
+      this._tick = storage.getTick();
+    }
 
     // Ledger intercepter: convert WorldEvents into LedgerEvents
     // This is the first step towards CQRS: recording the events into the Graph.
@@ -228,6 +234,7 @@ export class World {
 
   private advanceTick(): void {
     this._tick += 1;
+    this.ledger.storage.setTick(this._tick);
     const aliveEntities = this.getAliveEntities();
 
     // 1. 结算固有消耗 (气血流失)
@@ -256,6 +263,11 @@ export class World {
       type: "tick_complete",
       data: this.getSnapshot(),
       message: `--- 第 ${this._tick} 天结束 ---`,
+    });
+
+    // Flush dirty state to persistent storage
+    this.ledger.flush().catch((err) => {
+      console.error("[World] 持久化 flush 失败:", err);
     });
   }
 
@@ -384,7 +396,10 @@ export class World {
    * 游魂执行盖棺定论：将 article + events 聚合为墓志铭，然后安息。
    * 只有 status === "lingering" 的实体可以执行。
    */
-  performTomb(entityId: string, callerEpitaph?: string): {
+  performTomb(
+    entityId: string,
+    callerEpitaph?: string,
+  ): {
     success: boolean;
     epitaph?: string;
     snapshot?: { events: string[]; history: EntityHistory };
@@ -406,9 +421,7 @@ export class World {
     let epitaph: string;
     if (callerEpitaph) {
       // Use the caller-provided epitaph (e.g. LLM-generated)
-      epitaph = previousArticle
-        ? `${previousArticle}\n\n---\n\n${callerEpitaph}`
-        : callerEpitaph;
+      epitaph = previousArticle ? `${previousArticle}\n\n---\n\n${callerEpitaph}` : callerEpitaph;
     } else {
       // Fallback: aggregate raw event summary
       const eventSummaryLines: string[] = [];

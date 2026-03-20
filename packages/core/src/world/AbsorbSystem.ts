@@ -50,7 +50,6 @@ export const doAbsorb: ActionHandler = (entity, actionId, context) => {
   ambientPool.pools[core] = (ambientPool.pools[core] ?? 0) - absorbed;
   tankComp.tanks[core] = (tankComp.tanks[core] ?? 0) + absorbed;
 
-
   const coreCurrent = tankComp.tanks[core] ?? 0;
   const coreMaxVal = tankComp.maxTanks[core] ?? 1;
 

@@ -1,6 +1,8 @@
 import { nanoid } from "nanoid";
 import { UNIVERSE } from "../engine/index.js";
 import type { Entity } from "../entity/types.js";
+import { MemoryStorage } from "../storage/MemoryStorage.js";
+import type { StorageBackend } from "../storage/StorageBackend.js";
 import { LedgerGraph } from "./LedgerGraph.js";
 import { QiPoolManager } from "./QiPoolManager.js";
 import type { LedgerEvent } from "./types.js";
@@ -11,36 +13,39 @@ import type { LedgerEvent } from "./types.js";
  * 1. 实体现状 (State)
  * 2. 灵气池现状 (QiPool)
  * 3. 互动图网络 (LedgerGraph/EventList)
+ *
+ * v5: 委托给 StorageBackend 做持久化。
  */
 export class WorldLedger {
   public readonly qiPool: QiPoolManager;
   public readonly graph: LedgerGraph;
+  public readonly storage: StorageBackend;
 
-  // 替代旧版的 this.state.entities
-  private entities: Map<string, Entity> = new Map();
+  constructor(storage?: StorageBackend) {
+    this.storage = storage ?? new MemoryStorage();
 
-  constructor() {
     // Use SA-tunable totalParticles as the initial ambient qi base
     // SpawnPool will organically generate life from this ambient qi
     this.qiPool = new QiPoolManager(
       UNIVERSE.totalParticles,
       UNIVERSE.particles as { id: string }[],
+      this.storage,
     );
-    this.graph = new LedgerGraph(UNIVERSE.ledgerWindowSize);
+    this.graph = new LedgerGraph(this.storage, UNIVERSE.ledgerWindowSize);
   }
 
   // --- Entity 管理 ---
 
   getEntity(id: string): Entity | undefined {
-    return this.entities.get(id);
+    return this.storage.getEntity(id);
   }
 
   setEntity(entity: Entity) {
-    this.entities.set(entity.id, entity);
+    this.storage.setEntity(entity);
   }
 
   getAllEntities(): Entity[] {
-    return Array.from(this.entities.values());
+    return this.storage.getAllEntities();
   }
 
   getAliveEntities(): Entity[] {
@@ -48,7 +53,7 @@ export class WorldLedger {
   }
 
   removeEntity(id: string) {
-    this.entities.delete(id);
+    this.storage.removeEntity(id);
   }
 
   // --- 事件写入 ---
@@ -61,5 +66,13 @@ export class WorldLedger {
     };
     this.graph.append(fullEvent);
     return fullEvent;
+  }
+
+  // --- 持久化 ---
+
+  /** 将当前状态刷写到持久化存储 */
+  async flush(): Promise<void> {
+    this.storage.setQiPoolState(this.qiPool.state);
+    await this.storage.flush();
   }
 }

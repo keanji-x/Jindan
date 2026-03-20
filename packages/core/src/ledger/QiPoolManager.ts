@@ -1,10 +1,21 @@
 import type { ParticleId } from "../engine/types.js";
+import type { StorageBackend } from "../storage/StorageBackend.js";
 import type { QiPoolState } from "./types.js";
 
 export class QiPoolManager {
   public state: QiPoolState;
 
-  constructor(baseCapacity: number, particles: { id: string }[]) {
+  constructor(baseCapacity: number, particles: { id: string }[], storage?: StorageBackend) {
+    // Check if storage has persisted qi pool data
+    if (storage) {
+      const persisted = storage.getQiPoolState();
+      if (persisted.total > 0) {
+        this.state = persisted;
+        return;
+      }
+    }
+
+    // Fresh initialization
     const pools: Record<string, number> = {};
     for (const p of particles) pools[p.id] = 0;
 
@@ -16,6 +27,11 @@ export class QiPoolManager {
       pools,
       total: baseCapacity + Math.floor(baseCapacity * 0.1),
     };
+
+    // Persist initial state to storage
+    if (storage) {
+      storage.setQiPoolState(this.state);
+    }
   }
 
   getSnapshot(): QiPoolState {
