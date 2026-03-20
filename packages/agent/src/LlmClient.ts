@@ -2,8 +2,8 @@
 // LlmClient — Official SDK Wrapper (OpenAI / Anthropic)
 // ============================================================
 
-import OpenAI from "openai";
 import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
 
 export class LlmClient {
   private openai?: OpenAI;
@@ -12,7 +12,7 @@ export class LlmClient {
   constructor(
     private readonly apiKey: string,
     private readonly baseUrl: string,
-    private readonly model: string
+    private readonly model: string,
   ) {
     const normalizedUrl = this.baseUrl.replace(/\/$/, "");
     const isAnthropic = normalizedUrl.includes("coding") || normalizedUrl.includes("anthropic");
@@ -39,21 +39,25 @@ export class LlmClient {
 
   async complete(sysPrompt: string, userPrompt: string): Promise<string> {
     if (this.anthropic) {
-      console.log(`[LlmClient] Sending request via Anthropic SDK to ${this.baseUrl} (Model: ${this.model})`);
+      console.log(
+        `[LlmClient] Sending request via Anthropic SDK to ${this.baseUrl} (Model: ${this.model})`,
+      );
       const response = await this.anthropic.messages.create({
         model: this.model,
         system: sysPrompt,
         max_tokens: 4096,
         messages: [{ role: "user", content: userPrompt }],
       });
-      
+
       const content = response.content[0];
       if (content.type === "text") {
         return content.text;
       }
       return "";
     } else if (this.openai) {
-      console.log(`[LlmClient] Sending request via OpenAI SDK to ${this.baseUrl} (Model: ${this.model})`);
+      console.log(
+        `[LlmClient] Sending request via OpenAI SDK to ${this.baseUrl} (Model: ${this.model})`,
+      );
       const response = await this.openai.chat.completions.create({
         model: this.model,
         messages: [

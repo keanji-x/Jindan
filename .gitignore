@@ -6,3 +6,4 @@ dist/
 *.sqlite
 logs/
 external
+warn

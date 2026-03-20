@@ -57,9 +57,7 @@ export class ChatLogger {
       lines.push(
         `- **Action**: ${r.llmOutput.action}${r.llmOutput.targetId ? ` → ${r.llmOutput.targetId}` : ""}`,
       );
-      lines.push(
-        `- **Result**: ${r.actionResult.success ? "✅" : `❌ ${r.actionResult.error}`}`,
-      );
+      lines.push(`- **Result**: ${r.actionResult.success ? "✅" : `❌ ${r.actionResult.error}`}`);
       lines.push("");
     }
     fs.writeFileSync(this.mdPath, lines.join("\n"));

@@ -13,9 +13,10 @@ COPY package.json package-lock.json ./
 COPY packages/core/package.json packages/core/
 COPY packages/cli/package.json packages/cli/
 COPY packages/agent/package.json packages/agent/
+COPY packages/web/package.json packages/web/
 
 # Install all dependencies (including devDependencies for build)
-RUN npm ci --workspace=@jindan/core --workspace=@jindan/cli --workspace=@jindan/agent --include-workspace-root
+RUN npm ci --workspace=@jindan/core --workspace=@jindan/cli --workspace=@jindan/agent --workspace=@jindan/web --include-workspace-root
 
 # Copy source code
 COPY tsconfig.base.json ./
@@ -26,6 +27,8 @@ COPY packages/web/ packages/web/
 
 # Build TypeScript
 RUN npm run build -w @jindan/core
+# Build web frontend (Vite)
+RUN npm run build -w @jindan/web
 
 # ── Stage 2: Runner ────────────────────────────────────────
 FROM node:20-slim AS runner
@@ -37,15 +40,16 @@ COPY package.json package-lock.json ./
 COPY packages/core/package.json packages/core/
 COPY packages/cli/package.json packages/cli/
 COPY packages/agent/package.json packages/agent/
+COPY packages/web/package.json packages/web/
 
-RUN npm ci --workspace=@jindan/core --workspace=@jindan/cli --workspace=@jindan/agent --include-workspace-root --omit=dev
+RUN npm ci --workspace=@jindan/core --workspace=@jindan/cli --workspace=@jindan/agent --workspace=@jindan/web --include-workspace-root --omit=dev
 
 # Copy built artifacts
 COPY --from=builder /app/packages/core/dist packages/core/dist
 COPY --from=builder /app/tsconfig.base.json ./
 
-# Copy web static files (served by ApiServer)
-COPY packages/web/ packages/web/
+# Copy web built static files (served by ApiServer)
+COPY --from=builder /app/packages/web/dist packages/web/dist
 
 # Create logs directory
 RUN mkdir -p logs

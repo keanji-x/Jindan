@@ -14,7 +14,7 @@
     "test": "npm test --workspaces --if-present",
     "lint": "biome lint packages/",
     "fmt": "biome format --write packages/",
-    "check": "biome check packages/",
+    "check": "biome check packages/ && npm test --workspaces --if-present",
     "check:fix": "biome check --write packages/",
     "clean": "rm -rf packages/*/dist"
   },

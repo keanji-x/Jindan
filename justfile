@@ -1,12 +1,21 @@
 set allow-duplicate-recipes := true
 
-# 启动核心 API 服务器（内存存储，开发用）
+# 启动核心 API 服务器（内存存储，开发用，含 web 前端）
 start_mem:
+    npm run build -w @jindan/web
     npm run dev:core
+
+# 开发模式：web 前端热重载（需配合 start_mem 的 API 服务）
+dev_web:
+    npm run dev -w @jindan/web
 
 # Docker Compose 一键启动（PostgreSQL 持久化）
 start_docker:
     docker compose up --build
+
+# Docker Compose 停止并移除容器
+stop_docker:
+    docker compose down
 
 # 调用 CLI，例如：just cli create -n TestPlayer -s human
 cli +args:

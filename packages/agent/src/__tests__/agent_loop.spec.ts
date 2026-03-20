@@ -1,9 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import {
-  AgentHarness,
-  HeuristicLlm,
-  ScriptedLlm,
-} from "./AgentTestHarness.js";
+import { AgentHarness, HeuristicLlm, ScriptedLlm } from "./AgentTestHarness.js";
 
 describe("Agent OODA Loop (离线测试)", () => {
   it("Scripted: 按预设脚本执行 OODA 循环", () => {

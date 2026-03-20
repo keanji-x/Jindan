@@ -23,11 +23,9 @@ export class ApiClient {
 
   // ── Entity ─────────────────────────────────────────────
 
-  createEntity(name: string, species: "human" | "beast" | "plant") {
-    return this.request<{ id: string } & Record<string, unknown>>("POST", "/entity/create", {
-      name,
-      species,
-    });
+  /** 用私钥解析 entityId */
+  resolveSecret(secret: string) {
+    return this.request<{ entityId: string }>("POST", "/bot/resolve", { secret });
   }
 
   getObserve(id: string) {
@@ -79,5 +77,30 @@ export class ApiClient {
       `/entity/${id}/reincarnate`,
       { name, species },
     );
+  }
+
+  // ── Agent Relay ───────────────────────────────────────
+
+  /** 心跳 + 拉取待处理的用户聊天消息 */
+  heartbeat(entityId: string) {
+    return this.request<{
+      ok: boolean;
+      pendingChats: Array<{ chatId: string; message: string }>;
+    }>("POST", "/agent/heartbeat", { entityId });
+  }
+
+  /** 回传 LLM 处理结果给 Core */
+  chatReply(
+    chatId: string,
+    reply: string,
+    suggestedActions?: Array<{ action: string; targetId?: string; description: string }>,
+    entityStatus?: Record<string, unknown>,
+  ) {
+    return this.request<{ ok: boolean }>("POST", "/agent/chat-reply", {
+      chatId,
+      reply,
+      suggestedActions,
+      entityStatus,
+    });
   }
 }

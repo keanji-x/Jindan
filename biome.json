@@ -1,7 +1,12 @@
 {
   "$schema": "https://biomejs.dev/schemas/2.4.8/schema.json",
   "files": {
-    "includes": ["packages/core/src/**", "packages/cli/src/**", "packages/web/**", "*.json", "*.ts"]
+    "includes": ["packages/core/src/**", "packages/cli/src/**", "packages/web/src/**", "packages/agent/src/**", "*.json", "*.ts"]
+  },
+  "css": {
+    "parser": {
+      "cssModules": true
+    }
   },
   "formatter": {
     "indentStyle": "space",
@@ -16,7 +21,14 @@
         "noNonNullAssertion": "off"
       },
       "complexity": {
-        "noForEach": "off"
+        "noForEach": "off",
+        "useLiteralKeys": "off"
+      },
+      "suspicious": {
+        "useIterableCallbackReturn": "off"
+      },
+      "correctness": {
+        "noUnusedVariables": "warn"
       }
     }
   },
@@ -26,5 +38,22 @@
         "organizeImports": "on"
       }
     }
-  }
+  },
+  "overrides": [
+    {
+      "includes": ["packages/web/src/**/*.css"],
+      "css": {
+        "parser": {
+          "cssModules": true
+        }
+      },
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noUnknownAtRules": "off"
+          }
+        }
+      }
+    }
+  ]
 }
