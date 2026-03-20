@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { useAuth } from "./context/AuthContext";
 import DashboardPage from "./pages/DashboardPage";
+import EntityConfigPage from "./pages/EntityConfigPage";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 
@@ -43,6 +44,14 @@ export default function App() {
           <GuestRoute>
             <LoginPage />
           </GuestRoute>
+        }
+      />
+      <Route
+        path="/config"
+        element={
+          <ProtectedRoute>
+            <EntityConfigPage />
+          </ProtectedRoute>
         }
       />
       <Route

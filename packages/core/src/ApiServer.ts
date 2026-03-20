@@ -27,6 +27,36 @@ const MIME: Record<string, string> = {
   ".svg": "image/svg+xml",
 };
 
+// ── Security: CORS ────────────────────────────────────────
+const ALLOWED_ORIGINS = process.env.CORS_ORIGINS?.split(",") ?? [
+  "http://127.0.0.1:3001",
+  "http://localhost:3001",
+];
+
+// ── Security: Rate Limiter ────────────────────────────────
+class RateLimiter {
+  private attempts = new Map<string, number[]>();
+  constructor(
+    private windowMs: number,
+    private maxAttempts: number,
+  ) {}
+  check(key: string): void {
+    const now = Date.now();
+    const cutoff = now - this.windowMs;
+    const timestamps = (this.attempts.get(key) ?? []).filter((t) => t > cutoff);
+    if (timestamps.length >= this.maxAttempts) {
+      throw new ApiError("请求过于频繁，请稍后再试");
+    }
+    timestamps.push(now);
+    this.attempts.set(key, timestamps);
+  }
+}
+
+// 登录/注册: 每 IP 每分钟 10 次
+const authLimiter = new RateLimiter(60_000, 10);
+
+const MAX_BODY_SIZE = 1024 * 1024; // 1MB
+
 class ApiError extends Error {
   name = "ApiError";
 }
@@ -39,8 +69,9 @@ export class ApiServer {
   private readonly clients = new Set<WebSocket>();
 
   constructor(options?: { world?: World; storage?: StorageBackend }) {
-    this.world = options?.world ?? new World(options?.storage);
-    this.bot = new BotService(this.world);
+    const storage = options?.storage;
+    this.world = options?.world ?? new World(storage);
+    this.bot = new BotService(this.world, storage ?? this.world.ledger.storage);
     this.http = createServer(this.handle.bind(this));
     this.wss = new WebSocketServer({ server: this.http });
 
@@ -52,6 +83,20 @@ export class ApiServer {
     });
 
     this.wss.on("connection", (ws, req) => {
+      // ── WebSocket 认证：需要 ?token=<jwt> 参数 ──
+      const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
+      const token = url.searchParams.get("token");
+      if (!token) {
+        ws.close(4401, "Authentication required");
+        return;
+      }
+      try {
+        this.bot.verifyToken(token);
+      } catch {
+        ws.close(4401, "Invalid token");
+        return;
+      }
+
       const addr = req.socket.remoteAddress;
       console.log(`[WS] Client connected from ${addr}, total=${this.clients.size + 1}`);
       this.clients.add(ws);
@@ -124,9 +169,15 @@ export class ApiServer {
   }
 
   private async handle(req: IncomingMessage, res: ServerResponse) {
-    res.setHeader("Access-Control-Allow-Origin", "*");
+    // ── CORS ────────────────────────────────────────────
+    const origin = req.headers.origin;
+    if (origin && ALLOWED_ORIGINS.includes(origin)) {
+      res.setHeader("Access-Control-Allow-Origin", origin);
+    } else {
+      res.setHeader("Access-Control-Allow-Origin", ALLOWED_ORIGINS[0]!);
+    }
     res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Agent-Secret");
     if (req.method === "OPTIONS") {
       res.writeHead(204);
       res.end();
@@ -186,6 +237,18 @@ export class ApiServer {
     return null;
   }
 
+  private extractAgentSecret(req: IncomingMessage): string | null {
+    const secret = req.headers["x-agent-secret"];
+    if (typeof secret === "string" && secret) return secret;
+    return null;
+  }
+
+  private requireAgentSecret(req: IncomingMessage, entityId: string): void {
+    const secret = this.extractAgentSecret(req);
+    if (!secret) throw new ApiError("Agent secret required (X-Agent-Secret header)");
+    this.bot.verifyAgentAccess(entityId, secret);
+  }
+
   private async route(
     method: string,
     path: string,
@@ -201,6 +264,10 @@ export class ApiServer {
     if (method === "POST" && path.startsWith("/entity/")) {
       const parts = path.split("/");
       const id = parts[2]!;
+
+      // Agent 认证：所有 POST /entity/* 操作需要 secret
+      this.requireAgentSecret(req, id);
+
       if (parts[3] === "report") {
         const text = body.text as string;
         if (!text) throw new ApiError("text is required");
@@ -282,6 +349,8 @@ export class ApiServer {
         payload?: unknown;
       };
       if (!entityId || !action) throw new ApiError("entityId and action required");
+      // Agent 认证
+      this.requireAgentSecret(req, entityId);
       return this.world.performAction(entityId, action, targetId, payload);
     }
 
@@ -316,6 +385,8 @@ export class ApiServer {
     // ── Auth 路由 ─────────────────────────────────────────
 
     if (method === "POST" && path === "/auth/register") {
+      const ip = req.socket.remoteAddress ?? "unknown";
+      authLimiter.check(`register:${ip}`);
       const { username, password, inviteCode } = body as {
         username?: string;
         password?: string;
@@ -328,6 +399,8 @@ export class ApiServer {
     }
 
     if (method === "POST" && path === "/auth/login") {
+      const ip = req.socket.remoteAddress ?? "unknown";
+      authLimiter.check(`login:${ip}`);
       const { username, password } = body as {
         username?: string;
         password?: string;
@@ -359,6 +432,14 @@ export class ApiServer {
       if (!token) throw new ApiError("Missing Authorization token");
       const info = this.bot.getUserInfo(token);
       return { characters: info.characters };
+    }
+
+    if (method === "POST" && path === "/char/delete") {
+      const token = this.extractToken(req!);
+      if (!token) throw new ApiError("Missing Authorization token");
+      const { entityId } = body as { entityId?: string };
+      if (!entityId) throw new ApiError("entityId is required");
+      return this.bot.deleteCharacterForUser(token, entityId);
     }
 
     // ── Bot 路由 ─────────────────────────────────────────
@@ -415,11 +496,16 @@ export class ApiServer {
     if (method === "POST" && path === "/agent/heartbeat") {
       const { entityId } = body as { entityId?: string };
       if (!entityId) throw new ApiError("entityId is required");
+      this.requireAgentSecret(req, entityId);
       const pendingChats = this.bot.relay.heartbeat(entityId);
       return { ok: true, pendingChats };
     }
 
     if (method === "POST" && path === "/agent/chat-reply") {
+      // chat-reply 使用 chatId，无法直接映射到 entityId
+      // 仍需 agent secret header 存在作为基本校验
+      const secret = this.extractAgentSecret(req);
+      if (!secret) throw new ApiError("Agent secret required (X-Agent-Secret header)");
       const { chatId, reply, suggestedActions, entityStatus } = body as {
         chatId?: string;
         reply?: string;
@@ -469,7 +555,16 @@ export class ApiServer {
 function readJson(req: IncomingMessage): Promise<Record<string, unknown>> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
-    req.on("data", (c: Buffer) => chunks.push(c));
+    let totalSize = 0;
+    req.on("data", (c: Buffer) => {
+      totalSize += c.length;
+      if (totalSize > MAX_BODY_SIZE) {
+        req.destroy();
+        reject(new Error("Request body too large (max 1MB)"));
+        return;
+      }
+      chunks.push(c);
+    });
     req.on("end", () => {
       try {
         const t = Buffer.concat(chunks).toString();

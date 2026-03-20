@@ -8,6 +8,7 @@ import {
   getWorldStatus,
   type WorldStatus,
 } from "../api/client";
+import { useAuth } from "../context/AuthContext";
 
 const REALM_NAMES = [
   "凡人",
@@ -57,6 +58,7 @@ interface LogEntry {
 }
 
 export default function WorldPanel({ activeEntityId }: Props) {
+  const { token } = useAuth();
   const [world, setWorld] = useState<WorldStatus | null>(null);
   const [entities, setEntities] = useState<EntityData[]>([]);
   const [graveyard, setGraveyard] = useState<GraveyardGroup[]>([]);
@@ -87,10 +89,13 @@ export default function WorldPanel({ activeEntityId }: Props) {
     return () => clearInterval(timer);
   }, []);
 
-  // WebSocket for live updates
+  // WebSocket for live updates (requires JWT token)
   useEffect(() => {
+    if (!token) return; // not logged in, skip WS
     const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const ws = new WebSocket(`${proto}//${window.location.host}/api`);
+    const ws = new WebSocket(
+      `${proto}//${window.location.host}/api?token=${encodeURIComponent(token)}`,
+    );
     wsRef.current = ws;
 
     ws.onmessage = (event) => {
@@ -128,7 +133,7 @@ export default function WorldPanel({ activeEntityId }: Props) {
     };
 
     return () => ws.close();
-  }, []);
+  }, [token]);
 
   // ── Extract world data (matching original web logic) ────
   const tick = world?.tick ?? 0;

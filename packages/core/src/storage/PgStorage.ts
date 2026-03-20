@@ -7,7 +7,7 @@
 
 import type { Entity } from "../entity/types.js";
 import type { LedgerEvent, QiPoolState } from "../ledger/types.js";
-import type { StorageBackend } from "./StorageBackend.js";
+import type { StorageBackend, UserRecord } from "./StorageBackend.js";
 
 // Dynamic import to avoid hard dependency when using MemoryStorage
 let pg: typeof import("pg") | undefined;
@@ -31,11 +31,18 @@ export class PgStorage implements StorageBackend {
   private qiPool: QiPoolState = { pools: {}, total: 0 };
   private tick = 0;
 
+  // User & Secret caches
+  private users: Map<string, UserRecord> = new Map();
+  private secrets: Map<string, string> = new Map(); // entityId → hashedSecret
+  private secretIndex: Map<string, string> = new Map(); // hashedSecret → entityId
+
   // Dirty tracking for efficient flush
   private dirtyEntities: Set<string> = new Set();
   private newEvents: LedgerEvent[] = [];
   private qiPoolDirty = false;
   private tickDirty = false;
+  private dirtyUsers: Set<string> = new Set();
+  private dirtySecrets: Set<string> = new Set();
 
   constructor(connectionString: string) {
     this.connectionString = connectionString;
@@ -88,6 +95,22 @@ export class PgStorage implements StorageBackend {
       INSERT INTO world_state (id, qi_pools, qi_total, tick)
       VALUES (1, '{}', 0, 0)
       ON CONFLICT (id) DO NOTHING;
+
+      CREATE TABLE IF NOT EXISTS users (
+        username TEXT PRIMARY KEY,
+        password_hash TEXT NOT NULL,
+        entity_ids JSONB NOT NULL DEFAULT '[]',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS entity_secrets (
+        entity_id TEXT PRIMARY KEY,
+        hashed_secret TEXT NOT NULL UNIQUE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_entity_secrets_hash ON entity_secrets (hashed_secret);
     `);
 
     // Load existing data into memory
@@ -213,6 +236,37 @@ export class PgStorage implements StorageBackend {
     this.tickDirty = true;
   }
 
+  // ── User Accounts ──────────────────────────────────────
+
+  getUser(username: string): UserRecord | undefined {
+    return this.users.get(username);
+  }
+
+  setUser(username: string, record: UserRecord): void {
+    this.users.set(username, record);
+    this.dirtyUsers.add(username);
+  }
+
+  hasUser(username: string): boolean {
+    return this.users.has(username);
+  }
+
+  // ── Entity Secrets ─────────────────────────────────────
+
+  getSecret(entityId: string): string | undefined {
+    return this.secrets.get(entityId);
+  }
+
+  setSecret(entityId: string, hashedSecret: string): void {
+    this.secrets.set(entityId, hashedSecret);
+    this.secretIndex.set(hashedSecret, entityId);
+    this.dirtySecrets.add(entityId);
+  }
+
+  getEntityIdBySecret(hashedSecret: string): string | undefined {
+    return this.secretIndex.get(hashedSecret);
+  }
+
   // ── Persistence Flush ──────────────────────────────────
 
   async flush(): Promise<void> {
@@ -276,6 +330,33 @@ export class PgStorage implements StorageBackend {
         );
       }
 
+      // 4. Flush dirty users
+      for (const username of this.dirtyUsers) {
+        const user = this.users.get(username);
+        if (user) {
+          await client.query(
+            `INSERT INTO users (username, password_hash, entity_ids, updated_at)
+             VALUES ($1, $2, $3, NOW())
+             ON CONFLICT (username) DO UPDATE SET
+               password_hash = $2, entity_ids = $3, updated_at = NOW()`,
+            [username, user.passwordHash, JSON.stringify(user.entityIds)],
+          );
+        }
+      }
+
+      // 5. Flush dirty secrets
+      for (const entityId of this.dirtySecrets) {
+        const hashed = this.secrets.get(entityId);
+        if (hashed) {
+          await client.query(
+            `INSERT INTO entity_secrets (entity_id, hashed_secret)
+             VALUES ($1, $2)
+             ON CONFLICT (entity_id) DO UPDATE SET hashed_secret = $2`,
+            [entityId, hashed],
+          );
+        }
+      }
+
       await client.query("COMMIT");
 
       // Clear dirty tracking
@@ -283,6 +364,8 @@ export class PgStorage implements StorageBackend {
       this.newEvents = [];
       this.qiPoolDirty = false;
       this.tickDirty = false;
+      this.dirtyUsers.clear();
+      this.dirtySecrets.clear();
     } catch (err) {
       await client.query("ROLLBACK");
       console.error("[PgStorage] flush 失败:", err);
@@ -362,8 +445,24 @@ export class PgStorage implements StorageBackend {
       this.tick = row.tick ?? 0;
     }
 
+    // Load users
+    const { rows: userRows } = await this.pool.query("SELECT * FROM users ORDER BY created_at");
+    for (const row of userRows) {
+      this.users.set(row.username, {
+        passwordHash: row.password_hash,
+        entityIds: row.entity_ids ?? [],
+      });
+    }
+
+    // Load entity secrets
+    const { rows: secretRows } = await this.pool.query("SELECT * FROM entity_secrets");
+    for (const row of secretRows) {
+      this.secrets.set(row.entity_id, row.hashed_secret);
+      this.secretIndex.set(row.hashed_secret, row.entity_id);
+    }
+
     console.log(
-      `[PgStorage] 加载: ${this.entities.size} 实体, ${this.events.length} 事件, tick=${this.tick}`,
+      `[PgStorage] 加载: ${this.entities.size} 实体, ${this.events.length} 事件, ${this.users.size} 用户, ${this.secrets.size} 密钥, tick=${this.tick}`,
     );
   }
 }

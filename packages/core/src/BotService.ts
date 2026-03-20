@@ -6,17 +6,22 @@
 // ============================================================
 
 import { createHash, randomBytes } from "node:crypto";
+import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { AgentRelay, type ChatReply } from "./AgentRelay.js";
 import type { ActionId } from "./entity/types.js";
+import type { StorageBackend } from "./storage/StorageBackend.js";
 import type { World } from "./world/World.js";
 
 // ── JWT 密钥 ──────────────────────────────────────────────
-const JWT_SECRET = process.env.JWT_SECRET || "jindan-secret-key-change-in-production";
+const _jwtRaw = process.env.JWT_SECRET;
 const JWT_EXPIRES_IN = "7d";
 
 // ── 邀请码保护 ────────────────────────────────────────────
-const INVITE_CODE = process.env.INVITE_CODE || "";
+const INVITE_CODE = process.env.INVITE_CODE;
+if (!INVITE_CODE) {
+  console.warn("⚠️  INVITE_CODE 未设置，注册接口对所有人开放。生产环境请务必设置！");
+}
 
 // ── 简易频率限制 ──────────────────────────────────────────
 const RATE_LIMIT_WINDOW_MS = 60_000; // 1 分钟
@@ -35,24 +40,22 @@ interface UserPayload {
   type: "user";
 }
 
-interface UserRecord {
-  passwordHash: string;
-  entityIds: string[];
-}
-
 export class BotService {
   private readonly world: World;
+  private readonly storage: StorageBackend;
   readonly relay: AgentRelay;
+  private readonly jwtSecret: string;
 
-  /** entityId → hashed secret */
-  private readonly secrets = new Map<string, string>();
-  /** hashed secret → entityId (反向查询) */
-  private readonly secretIndex = new Map<string, string>();
-  /** username → user record */
-  private readonly users = new Map<string, UserRecord>();
-
-  constructor(world: World) {
+  constructor(world: World, storage: StorageBackend) {
+    if (!_jwtRaw) {
+      throw new Error(
+        "⚠️  JWT_SECRET 环境变量未设置，拒绝启动！请在 .env 中配置，例如:\n" +
+          '   JWT_SECRET="your-random-secret-at-least-32-chars"',
+      );
+    }
+    this.jwtSecret = _jwtRaw;
     this.world = world;
+    this.storage = storage;
     this.relay = new AgentRelay();
   }
 
@@ -60,9 +63,32 @@ export class BotService {
   // 0. 用户账户系统
   // ================================================================
 
-  /** hash 工具 */
+  /** hash 工具 (entity secret 用 SHA-256) */
   private hashSecret(secret: string): string {
     return createHash("sha256").update(secret).digest("hex");
+  }
+
+  /** bcrypt password hash (cost=10) */
+  private hashPassword(password: string): string {
+    return bcrypt.hashSync(password, 10);
+  }
+
+  /** 校验 password (兼容老 SHA-256 hash, 自动迁移) */
+  private verifyPassword(password: string, stored: string, username: string): boolean {
+    // bcrypt hashes start with $2a$ or $2b$
+    if (stored.startsWith("$2")) {
+      return bcrypt.compareSync(password, stored);
+    }
+    // Legacy SHA-256 fallback — auto-upgrade
+    const sha = this.hashSecret(password);
+    if (sha !== stored) return false;
+    // Upgrade to bcrypt on successful legacy login
+    const user = this.storage.getUser(username);
+    if (user) {
+      user.passwordHash = this.hashPassword(password);
+      this.storage.setUser(username, user);
+    }
+    return true;
   }
 
   /** 注册用户 */
@@ -79,13 +105,13 @@ export class BotService {
     }
     if (!username || username.length < 2) throw new Error("用户名至少 2 个字符");
     if (!password || password.length < 4) throw new Error("密码至少 4 个字符");
-    if (this.users.has(username)) throw new Error("用户名已存在");
+    if (this.storage.hasUser(username)) throw new Error("用户名已存在");
 
-    const passwordHash = this.hashSecret(password);
-    this.users.set(username, { passwordHash, entityIds: [] });
+    const passwordHash = this.hashPassword(password);
+    this.storage.setUser(username, { passwordHash, entityIds: [] });
 
     const payload: UserPayload = { username, type: "user" };
-    const token = jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+    const token = jwt.sign(payload, this.jwtSecret, { expiresIn: JWT_EXPIRES_IN });
     return { token, user: { username } };
   }
 
@@ -97,19 +123,21 @@ export class BotService {
     token: string;
     user: { username: string };
   } {
-    const user = this.users.get(username);
+    const user = this.storage.getUser(username);
     if (!user) throw new Error("用户名或密码错误");
-    if (user.passwordHash !== this.hashSecret(password)) throw new Error("用户名或密码错误");
+    if (!this.verifyPassword(password, user.passwordHash, username)) {
+      throw new Error("用户名或密码错误");
+    }
 
     const payload: UserPayload = { username, type: "user" };
-    const token = jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+    const token = jwt.sign(payload, this.jwtSecret, { expiresIn: JWT_EXPIRES_IN });
     return { token, user: { username } };
   }
 
   /** 验证 User JWT */
   verifyUserToken(token: string): UserPayload {
     try {
-      const payload = jwt.verify(token, JWT_SECRET) as UserPayload;
+      const payload = jwt.verify(token, this.jwtSecret) as UserPayload;
       if (payload.type !== "user") throw new Error("Invalid user token");
       return payload;
     } catch {
@@ -129,7 +157,7 @@ export class BotService {
     }[];
   } {
     const { username } = this.verifyUserToken(userToken);
-    const user = this.users.get(username);
+    const user = this.storage.getUser(username);
     if (!user) throw new Error("用户不存在");
 
     const characters = user.entityIds
@@ -155,7 +183,7 @@ export class BotService {
     species: "human" | "beast" | "plant",
   ): { entityId: string; secret: string; entity: Record<string, unknown> } {
     const { username } = this.verifyUserToken(userToken);
-    const user = this.users.get(username);
+    const user = this.storage.getUser(username);
     if (!user) throw new Error("用户不存在");
 
     // 频率限制
@@ -170,13 +198,33 @@ export class BotService {
     // 生成私钥
     const secret = `jd_${randomBytes(12).toString("hex")}`;
     const hashed = this.hashSecret(secret);
-    this.secrets.set(entity.id, hashed);
-    this.secretIndex.set(hashed, entity.id);
+    this.storage.setSecret(entity.id, hashed);
 
     // 绑定到用户
     user.entityIds.push(entity.id);
+    this.storage.setUser(username, user);
 
     return { entityId: entity.id, secret, entity: entity as unknown as Record<string, unknown> };
+  }
+
+  /** 以用户身份删除角色 */
+  deleteCharacterForUser(userToken: string, entityId: string): { success: boolean } {
+    const { username } = this.verifyUserToken(userToken);
+    const user = this.storage.getUser(username);
+    if (!user) throw new Error("用户不存在");
+
+    if (!user.entityIds.includes(entityId)) {
+      throw new Error("无权删除该角色或角色不存在");
+    }
+
+    // 从用户的列表中移除
+    user.entityIds = user.entityIds.filter((id) => id !== entityId);
+    this.storage.setUser(username, user);
+
+    // 从存储和世界中彻底移除
+    this.storage.removeEntity(entityId);
+
+    return { success: true };
   }
 
   // ================================================================
@@ -214,8 +262,7 @@ export class BotService {
     // 生成私钥: jd_ + 24 字符随机 hex
     const secret = `jd_${randomBytes(12).toString("hex")}`;
     const hashed = this.hashSecret(secret);
-    this.secrets.set(entity.id, hashed);
-    this.secretIndex.set(hashed, entity.id);
+    this.storage.setSecret(entity.id, hashed);
 
     return { entityId: entity.id, secret, entity: entity as unknown as Record<string, unknown> };
   }
@@ -227,10 +274,10 @@ export class BotService {
     entity: Record<string, unknown>;
   } {
     const hashed = this.hashSecret(secret);
-    const entityId = this.secretIndex.get(hashed);
+    const entityId = this.storage.getEntityIdBySecret(hashed);
     if (!entityId) throw new Error("私钥无效");
 
-    const storedHash = this.secrets.get(entityId);
+    const storedHash = this.storage.getSecret(entityId);
     if (storedHash !== hashed) throw new Error("私钥无效");
 
     const entity = this.world.getEntity(entityId);
@@ -241,23 +288,32 @@ export class BotService {
       name: entity.name,
       species: entity.species,
     };
-    const token = jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+    const token = jwt.sign(payload, this.jwtSecret, { expiresIn: JWT_EXPIRES_IN });
     return { token, entityId: entity.id, entity: entity as unknown as Record<string, unknown> };
   }
 
   /** 用私钥解析 entityId（给 agent 用，不签发 JWT） */
   resolveEntityId(secret: string): string {
     const hashed = this.hashSecret(secret);
-    const entityId = this.secretIndex.get(hashed);
+    const entityId = this.storage.getEntityIdBySecret(hashed);
     if (!entityId) throw new Error("私钥无效");
     if (!this.world.getEntity(entityId)) throw new Error("角色已不存在");
     return entityId;
   }
 
+  /** 验证 agent 操作权限：entityId 的 secret 必须匹配 */
+  verifyAgentAccess(entityId: string, secret: string): void {
+    const hashed = this.hashSecret(secret);
+    const stored = this.storage.getSecret(entityId);
+    if (!stored || stored !== hashed) {
+      throw new Error("Agent 认证失败：无效的 entity secret");
+    }
+  }
+
   /** 验证 JWT → 返回 session 信息 */
   verifyToken(token: string): SessionPayload {
     try {
-      return jwt.verify(token, JWT_SECRET) as SessionPayload;
+      return jwt.verify(token, this.jwtSecret) as SessionPayload;
     } catch {
       throw new Error("Invalid or expired token");
     }

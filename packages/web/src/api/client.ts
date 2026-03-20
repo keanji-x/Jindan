@@ -85,6 +85,10 @@ export function charList(token: string) {
   return request<{ characters: CharacterInfo[] }>("GET", "/char/list", undefined, token);
 }
 
+export function charDelete(token: string, entityId: string) {
+  return request<{ success: boolean }>("POST", "/char/delete", { entityId }, token);
+}
+
 // ── Bot (Chat) ──────────────────────────────────────────
 
 export interface BotLoginResponse {

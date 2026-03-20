@@ -4,7 +4,7 @@
 
 import type { Entity } from "../entity/types.js";
 import type { LedgerEvent, QiPoolState } from "../ledger/types.js";
-import type { StorageBackend } from "./StorageBackend.js";
+import type { StorageBackend, UserRecord } from "./StorageBackend.js";
 
 export class MemoryStorage implements StorageBackend {
   private entities: Map<string, Entity> = new Map();
@@ -13,6 +13,11 @@ export class MemoryStorage implements StorageBackend {
   private byTarget: Map<string, LedgerEvent[]> = new Map();
   private qiPool: QiPoolState = { pools: {}, total: 0 };
   private tick = 0;
+
+  // User & Secret storage
+  private users: Map<string, UserRecord> = new Map();
+  private secrets: Map<string, string> = new Map(); // entityId → hashedSecret
+  private secretIndex: Map<string, string> = new Map(); // hashedSecret → entityId
 
   // ── Lifecycle ──────────────────────────────────────────
 
@@ -128,6 +133,35 @@ export class MemoryStorage implements StorageBackend {
 
   setTick(tick: number): void {
     this.tick = tick;
+  }
+
+  // ── User Accounts ──────────────────────────────────────
+
+  getUser(username: string): UserRecord | undefined {
+    return this.users.get(username);
+  }
+
+  setUser(username: string, record: UserRecord): void {
+    this.users.set(username, record);
+  }
+
+  hasUser(username: string): boolean {
+    return this.users.has(username);
+  }
+
+  // ── Entity Secrets ─────────────────────────────────────
+
+  getSecret(entityId: string): string | undefined {
+    return this.secrets.get(entityId);
+  }
+
+  setSecret(entityId: string, hashedSecret: string): void {
+    this.secrets.set(entityId, hashedSecret);
+    this.secretIndex.set(hashedSecret, entityId);
+  }
+
+  getEntityIdBySecret(hashedSecret: string): string | undefined {
+    return this.secretIndex.get(hashedSecret);
   }
 
   // ── Persistence Flush ──────────────────────────────────

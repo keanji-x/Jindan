@@ -5,12 +5,19 @@
 import type { ActionId } from "@jindan/core";
 
 export class ApiClient {
-  constructor(private readonly baseUrl: string) {}
+  constructor(
+    private readonly baseUrl: string,
+    private readonly agentSecret?: string,
+  ) {}
 
   private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
+    const headers: Record<string, string> = {};
+    if (body) headers["Content-Type"] = "application/json";
+    if (this.agentSecret) headers["X-Agent-Secret"] = this.agentSecret;
+
     const res = await fetch(`${this.baseUrl}${path}`, {
       method,
-      headers: body ? { "Content-Type": "application/json" } : {},
+      headers,
       body: body ? JSON.stringify(body) : undefined,
     });
 
