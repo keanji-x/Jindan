@@ -1,5 +1,4 @@
 import { World } from "./packages/core/src/world/World.js";
-import { doDevour } from "./packages/core/src/world/DevourSystem.js";
 
 const w = new World();
 const e1 = w.createEntity("Bot1", "human");

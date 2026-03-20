@@ -14,10 +14,15 @@ describe("诊断：游戏系统核心机制", () => {
 
     const tank = player.components.tank!;
     const core = tank.coreParticle;
-    const initialQi = tank.tanks[core]!;
     const maxQi = tank.maxTanks[core]!;
 
-    expect(initialQi).toBe(maxQi); // 出生应该是满的
+    // 工厂初始化为 20% 灵气，手动填满以测试满罐打坐
+    const ambient = world.ledger.qiPool.state;
+    const deficit = maxQi - (tank.tanks[core] ?? 0);
+    tank.tanks[core] = maxQi;
+    ambient.pools[core] = (ambient.pools[core] ?? 0) - deficit;
+
+    expect(tank.tanks[core]).toBe(maxQi);
 
     // 满罐打坐：扣费 → 吸收 → 净零（正确行为）
     world.performAction(player.id, "meditate");
@@ -31,24 +36,23 @@ describe("诊断：游戏系统核心机制", () => {
     const world = createWorld();
     const player = world.createEntity("测试修士", "human");
 
-    // 先突破失败来消耗灵气，模拟实际游戏状态
+    // 手动创建一株灵植作为吞噬目标
+    const target = world.createEntity("碧灵草", "plant");
+
     const tank = player.components.tank!;
     const core = tank.coreParticle;
     const maxQi = tank.maxTanks[core]!;
 
-    // 手动降低灵气到 ~50%
+    // 手动降低灵气到 ~50% 当前值
     const ambient = world.ledger.qiPool.state;
-    const drain = Math.floor(maxQi * 0.5);
-    tank.tanks[core] = (tank.tanks[core] ?? 0) - drain;
+    const currentQi = tank.tanks[core] ?? 0;
+    const drain = Math.floor(currentQi * 0.5);
+    tank.tanks[core] = currentQi - drain;
     ambient.pools[core] = (ambient.pools[core] ?? 0) + drain;
 
     const qiBefore = tank.tanks[core]!;
     console.log(`\n吞噬前灵气: ${qiBefore}/${maxQi}`);
 
-    const plants = world.getAliveEntities("plant");
-    expect(plants.length).toBeGreaterThan(0);
-
-    const target = plants[0]!;
     const targetTank = target.components.tank!;
     console.log(
       `目标: ${target.name}, 核心粒子=${targetTank.coreParticle}, 灵气=${targetTank.tanks[targetTank.coreParticle]}`,
@@ -75,13 +79,12 @@ describe("诊断：游戏系统核心机制", () => {
     const world = createWorld();
     const player = world.createEntity("测试修士", "human");
 
+    // 手动创建一只妖兽作为吞噬目标
+    const target = world.createEntity("噬煞蝇", "beast");
+
     const tank = player.components.tank!;
     const core = tank.coreParticle; // ql
 
-    const beasts = world.getAliveEntities("beast");
-    expect(beasts.length).toBeGreaterThan(0);
-
-    const target = beasts[0]!;
     const targetTank = target.components.tank!;
     console.log(`\n人(${core}) 吃 兽(${targetTank.coreParticle})`);
 

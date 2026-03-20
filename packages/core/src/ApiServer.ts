@@ -7,6 +7,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type WebSocket, WebSocketServer } from "ws";
+import { BotService } from "./BotService.js";
 import { UNIVERSE } from "./engine/index.js";
 import { AiRegistry } from "./entity/ai/AiRegistry.js";
 import type { ActionId } from "./entity/types.js";
@@ -32,12 +33,14 @@ class ApiError extends Error {
 
 export class ApiServer {
   private readonly world: World;
+  private readonly bot: BotService;
   private readonly http: ReturnType<typeof createServer>;
   private readonly wss: WebSocketServer;
   private readonly clients = new Set<WebSocket>();
 
   constructor(options?: { world?: World; storage?: StorageBackend }) {
     this.world = options?.world ?? new World(options?.storage);
+    this.bot = new BotService(this.world);
     this.http = createServer(this.handle.bind(this));
     this.wss = new WebSocketServer({ server: this.http });
 
@@ -105,8 +108,9 @@ export class ApiServer {
 
   start(port = 3001): Promise<void> {
     return new Promise((r) =>
-      this.http.listen(port, () => {
-        console.log(`🌍 金丹世界 API: http://localhost:${port}`);
+      this.http.listen(port, "0.0.0.0", () => {
+        console.log(`🌍 金丹世界 API: http://127.0.0.1:${port}`);
+        console.log(`(注: 如果浏览器打开 localhost 白屏转圈，请使用上面的 127.0.0.1 链接)`);
         r();
       }),
     );
@@ -122,7 +126,7 @@ export class ApiServer {
   private async handle(req: IncomingMessage, res: ServerResponse) {
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
     if (req.method === "OPTIONS") {
       res.writeHead(204);
       res.end();
@@ -132,24 +136,24 @@ export class ApiServer {
     const url = new URL(req.url ?? "/", `http://${req.headers.host}`);
     try {
       const body = req.method === "POST" ? await readJson(req) : {};
-      const result = this.route(req.method!, url.pathname, body);
+      const result = await this.route(req.method!, url.pathname, body, req);
       if (result !== undefined) {
         res.writeHead(200, { "Content-Type": "application/json" });
         res.end(JSON.stringify(result, null, 2));
         return;
       }
     } catch (err) {
-      if (err instanceof ApiError) {
-        res.writeHead(400, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ error: err.message }));
-        return;
-      }
+      const status = err instanceof ApiError ? 400 : 500;
+      const message = err instanceof Error ? err.message : String(err);
+      res.writeHead(status, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: message }));
+      return;
     }
     await this.serveStatic(url.pathname, res);
   }
 
   private async serveStatic(p: string, res: ServerResponse) {
-    const root = join(__dirname, "../../web");
+    const root = join(__dirname, "../../web/dist");
     const full = join(root, p === "/" ? "/index.html" : p);
     if (!full.startsWith(root)) {
       res.writeHead(403);
@@ -164,21 +168,34 @@ export class ApiServer {
       });
       res.end(buf);
     } catch {
-      res.writeHead(404);
-      res.end("Not Found");
+      // SPA fallback: serve index.html for client-side routing
+      try {
+        const index = await readFile(join(root, "index.html"));
+        res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+        res.end(index);
+      } catch {
+        res.writeHead(404);
+        res.end("Not Found");
+      }
     }
   }
 
-  private route(method: string, path: string, body: Record<string, unknown>): unknown | undefined {
+  private extractToken(req: IncomingMessage): string | null {
+    const auth = req.headers.authorization;
+    if (auth?.startsWith("Bearer ")) return auth.slice(7);
+    return null;
+  }
+
+  private async route(
+    method: string,
+    path: string,
+    body: Record<string, unknown>,
+    req: IncomingMessage,
+  ): Promise<unknown | undefined> {
     if (method === "GET" && path === "/world/status") return this.world.getSnapshot();
 
     if (method === "POST" && path === "/entity/create") {
-      const name = body.name as string,
-        species = body.species as string;
-      if (!name) throw new ApiError("name is required");
-      if (!["human", "beast", "plant"].includes(species))
-        throw new ApiError("species must be human|beast|plant");
-      return this.world.createEntity(name, species as "human" | "beast" | "plant");
+      throw new ApiError("Direct entity creation disabled. Use /bot/create with invite code.");
     }
 
     if (method === "POST" && path.startsWith("/entity/")) {
@@ -295,6 +312,133 @@ export class ApiServer {
     }
 
     if (method === "GET" && path === "/entities") return this.world.getAliveEntities();
+
+    // ── Auth 路由 ─────────────────────────────────────────
+
+    if (method === "POST" && path === "/auth/register") {
+      const { username, password, inviteCode } = body as {
+        username?: string;
+        password?: string;
+        inviteCode?: string;
+      };
+      if (!username) throw new ApiError("username is required");
+      if (!password) throw new ApiError("password is required");
+      if (!inviteCode) throw new ApiError("inviteCode is required");
+      return this.bot.register(username, password, inviteCode);
+    }
+
+    if (method === "POST" && path === "/auth/login") {
+      const { username, password } = body as {
+        username?: string;
+        password?: string;
+      };
+      if (!username || !password) throw new ApiError("username and password required");
+      return this.bot.userLogin(username, password);
+    }
+
+    if (method === "GET" && path === "/auth/me") {
+      const token = this.extractToken(req!);
+      if (!token) throw new ApiError("Missing Authorization token");
+      return this.bot.getUserInfo(token);
+    }
+
+    // ── Character 路由 ────────────────────────────────────
+
+    if (method === "POST" && path === "/char/create") {
+      const token = this.extractToken(req!);
+      if (!token) throw new ApiError("Missing Authorization token");
+      const { name, species } = body as { name?: string; species?: string };
+      if (!name) throw new ApiError("name is required");
+      if (!["human", "beast", "plant"].includes(species || ""))
+        throw new ApiError("species must be human|beast|plant");
+      return this.bot.createCharacterForUser(token, name, species as "human" | "beast" | "plant");
+    }
+
+    if (method === "GET" && path === "/char/list") {
+      const token = this.extractToken(req!);
+      if (!token) throw new ApiError("Missing Authorization token");
+      const info = this.bot.getUserInfo(token);
+      return { characters: info.characters };
+    }
+
+    // ── Bot 路由 ─────────────────────────────────────────
+
+    if (method === "POST" && path === "/bot/create") {
+      const { name, species, inviteCode } = body as {
+        name?: string;
+        species?: string;
+        inviteCode?: string;
+      };
+      if (!name) throw new ApiError("name is required");
+      if (!["human", "beast", "plant"].includes(species || ""))
+        throw new ApiError("species must be human|beast|plant");
+      return this.bot.createEntity(name, species as "human" | "beast" | "plant", inviteCode);
+    }
+
+    if (method === "POST" && path === "/bot/login") {
+      const { secret } = body as { secret?: string };
+      if (!secret) throw new ApiError("secret is required");
+      return this.bot.authenticate(secret);
+    }
+
+    if (method === "POST" && path === "/bot/resolve") {
+      const { secret } = body as { secret?: string };
+      if (!secret) throw new ApiError("secret is required");
+      const entityId = this.bot.resolveEntityId(secret);
+      return { entityId };
+    }
+
+    if (method === "GET" && path === "/bot/session") {
+      const token = this.extractToken(req!);
+      if (!token) throw new ApiError("Missing Authorization token");
+      return this.bot.getSession(token);
+    }
+
+    if (method === "POST" && path === "/bot/chat") {
+      const token = this.extractToken(req!);
+      if (!token) throw new ApiError("Missing Authorization token");
+      const { message } = body as { message: string };
+      if (!message) throw new ApiError("message is required");
+      return await this.bot.chat(token, message);
+    }
+
+    if (method === "POST" && path === "/bot/act") {
+      const token = this.extractToken(req!);
+      if (!token) throw new ApiError("Missing Authorization token");
+      const { action, targetId } = body as { action: string; targetId?: string };
+      if (!action) throw new ApiError("action is required");
+      return this.bot.performAction(token, action, targetId);
+    }
+
+    // ── Agent Relay 路由 ─────────────────────────────────
+
+    if (method === "POST" && path === "/agent/heartbeat") {
+      const { entityId } = body as { entityId?: string };
+      if (!entityId) throw new ApiError("entityId is required");
+      const pendingChats = this.bot.relay.heartbeat(entityId);
+      return { ok: true, pendingChats };
+    }
+
+    if (method === "POST" && path === "/agent/chat-reply") {
+      const { chatId, reply, suggestedActions, entityStatus } = body as {
+        chatId?: string;
+        reply?: string;
+        suggestedActions?: Array<{ action: string; targetId?: string; description: string }>;
+        entityStatus?: Record<string, unknown>;
+      };
+      if (!chatId) throw new ApiError("chatId is required");
+      if (!reply) throw new ApiError("reply is required");
+      const resolved = this.bot.relay.resolveChat(chatId, {
+        reply,
+        suggestedActions,
+        entityStatus,
+      });
+      return { ok: resolved };
+    }
+
+    if (method === "GET" && path === "/agent/status") {
+      return { onlineAgents: this.bot.relay.getOnlineAgents() };
+    }
 
     if (method === "GET" && path === "/graveyard") {
       const dead = this.world.getDeadEntities();

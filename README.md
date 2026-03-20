@@ -4,18 +4,49 @@
 
 灵脉吐纳灵气，修士吸收修炼，妖兽争夺资源，死亡归还天地 — 一个自循环的修仙生态。
 
-## 快速开始
+## 快速开始 (Quick Start)
 
+项目提供了多种启动方式，推荐使用 [`just`](https://github.com/casey/just) 命令快速管理。
+
+### 1. 环境配置 (必需)
+每个子包各自管理自己的环境变量，互不干扰。首次启动前，请根据模板生成配置：
+```bash
+# 后端 API 配置 (数据库、JWT 密钥、邀请码)
+cp packages/core/.env.example packages/core/.env
+
+# AI 代理配置 (OpenAI API Key、实体私钥)
+cp packages/agent/.env.example packages/agent/.env
+```
+
+### 2. 本地内存模式启动 (适合快速体验与测试)
+此模式不依赖外部数据库，服务重启后世界会重置。
 ```bash
 # 安装依赖
 npm install
 
-# 启动世界 (API + 前端)
-npm run dev:core
-
-# 浏览器打开前端观战面板
-open http://localhost:3001
+# 一键启动 (自动构建前端 + 启动核心引擎)
+just start_mem
 ```
+启动成功后，在浏览器访问: [http://127.0.0.1:3001](http://127.0.0.1:3001)
+
+### 3. Docker 部署启动 (持久化 PostgreSQL 数据库)
+如果你需要长久运行金丹世界并持久化所有实体记录，推荐使用 Docker Compose：
+```bash
+# 自动构建并启动容器组 (包含数据库和引擎 API)
+just start_docker
+
+# 停止并移除容器
+just stop_docker
+```
+
+### 4. 启动自动化 AI 玩家 (Agent)
+你在 Web 界面创建一个角色后，系统会分配一个**实体私钥**。此时你可以启动一个 AI 代理，让大语言模型接管这个角色：
+1. 在 `packages/agent/.env` 中配置 `OPENAI_API_KEY` 和 `ENTITY_SECRET`。
+2. 运行代理程序：
+```bash
+just start_agent
+```
+> Agent 启动后会自动通过私钥连接角色，并以 1 秒间隔发送心跳保持在线。在线状态下，用户可通过 Web UI 与角色潜意识对话。
 
 ## 用 CLI 来玩
 

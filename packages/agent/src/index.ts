@@ -1,17 +1,19 @@
 #!/usr/bin/env node
-import dotenv from "dotenv";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import dotenv from "dotenv";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-dotenv.config({ path: path.resolve(__dirname, "../../../env/.env") });
+// Load agent-specific environment variables
+dotenv.config({ path: path.resolve(__dirname, "../.env") });
 
 import { parseArgs } from "node:util";
 import type { ActionId } from "@jindan/core";
 import { ApiClient } from "./ApiClient.js";
+import { ChatHandler } from "./chatHandler.js";
 import { LlmClient } from "./LlmClient.js";
 
-const { values, positionals } = parseArgs({
+const { values } = parseArgs({
   allowPositionals: true,
   options: {
     host: { type: "string", default: "http://localhost:3001" },
@@ -22,6 +24,7 @@ const { values, positionals } = parseArgs({
     url: { type: "string", short: "u" },
     model: { type: "string", short: "m" },
     interval: { type: "string", default: "10000" }, // 10 seconds default
+    heartbeat: { type: "string", default: "1000" }, // 1 second heartbeat
   },
 });
 
@@ -36,13 +39,16 @@ if (!apiKey) {
 
 const api = new ApiClient(values.host!);
 const llm = new LlmClient(apiKey, baseUrl, modelName);
+const chatHandler = new ChatHandler(api, llm);
+
 const sleepMs = parseInt(values.interval!, 10) || 10000;
+const heartbeatMs = parseInt(values.heartbeat!, 10) || 1000;
 
 async function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-import { SYSTEM_PROMPT, generateUserPrompt } from "./prompt.js";
+import { generateUserPrompt, SYSTEM_PROMPT } from "./prompt.js";
 
 const EPITAPH_PROMPT = `
 你已死亡，灵魂飘荡在天地之间。
@@ -62,11 +68,69 @@ const EPITAPH_PROMPT = `
 
 import { ChatLogger } from "./ChatLogger.js";
 
+// ============================================================
+// 心跳循环 (独立 1s 周期) — 保持在线 + Chat 插队
+// ============================================================
+
+function startHeartbeatLoop(entityId: string) {
+  let processing = false; // 防止心跳回调重入
+
+  const timer = setInterval(async () => {
+    if (processing) return;
+    processing = true;
+
+    try {
+      const { pendingChats } = await api.heartbeat(entityId);
+
+      // 如果有待处理的 Chat 消息，立刻插队处理
+      for (const chat of pendingChats) {
+        console.log(`[Heartbeat] 📩 收到用户聊天 (chatId=${chat.chatId}): "${chat.message}"`);
+        try {
+          const result = await chatHandler.handle(entityId, chat.message);
+          await api.chatReply(
+            chat.chatId,
+            result.reply,
+            result.suggestedActions,
+            result.entityStatus,
+          );
+          console.log(`[Heartbeat] ✅ 回复已发送 (chatId=${chat.chatId})`);
+        } catch (err) {
+          console.error(
+            `[Heartbeat] ❌ Chat 处理失败:`,
+            err instanceof Error ? err.message : String(err),
+          );
+          // 仍然尝试回复一个错误消息
+          await api
+            .chatReply(
+              chat.chatId,
+              `（灵识波动异常：${err instanceof Error ? err.message : "未知错误"}）`,
+            )
+            .catch(() => {});
+        }
+      }
+    } catch {
+      // 心跳失败（如网络断开），静默忽略，下次重试
+    }
+
+    processing = false;
+  }, heartbeatMs);
+
+  return timer;
+}
+
+// ============================================================
+// OODA 循环 (独立 10s 周期) — 自主行动
+// ============================================================
+
 async function loop(startId: string, name: string, species: string) {
-  let id = startId;
+  const id = startId;
   console.log(`\n\n[AgentLoop] Starting loop for Agent ID: ${id}`);
   let logger = new ChatLogger(id, path.resolve(__dirname, "../../logs"));
   let cycle = 0;
+
+  // 启动独立的心跳循环
+  const heartbeatTimer = startHeartbeatLoop(id);
+  console.log(`[AgentLoop] 💓 心跳循环已启动 (${heartbeatMs}ms 间隔)`);
 
   while (true) {
     cycle++;
@@ -82,7 +146,9 @@ async function loop(startId: string, name: string, species: string) {
       }
 
       if (lifeStatus.status === "lingering") {
-        console.log(`[AgentLoop] 👻 Entity ${id} is a lingering soul (游魂). Generating epitaph via LLM...`);
+        console.log(
+          `[AgentLoop] 👻 Entity ${id} is a lingering soul (游魂). Generating epitaph via LLM...`,
+        );
 
         // Retrieve memory for the LLM to reflect on
         const memoryData = await api.getMemory(id);
@@ -114,19 +180,27 @@ ${lifeStatus.life.article || "（无前世记忆，这是第一世）"}
             console.error(`[AgentLoop] Tomb failed:`, tombResult.error);
           }
         } catch (err) {
-          console.error(`[AgentLoop] LLM epitaph generation failed, performing tomb without AI:`, err instanceof Error ? err.message : String(err));
+          console.error(
+            `[AgentLoop] LLM epitaph generation failed, performing tomb without AI:`,
+            err instanceof Error ? err.message : String(err),
+          );
           await api.performTomb(id);
         }
 
-        // Reincarnate: create a new entity inheriting past life memories
+        // Reincarnate: reset entity in-place (entityId stays the same)
         console.log(`[AgentLoop] 🔄 Reincarnating ${id}...`);
         try {
-          const reinResult = await api.reincarnate(id, name, species as "human" | "beast" | "plant");
-          if (reinResult.success && reinResult.entity) {
-            id = reinResult.entity.id;
+          const reinResult = await api.reincarnate(
+            id,
+            name,
+            species as "human" | "beast" | "plant",
+          );
+          if (reinResult.success) {
+            // entityId 不变，心跳无需重启
             logger = new ChatLogger(id, path.resolve(__dirname, "../../logs"));
+            chatHandler.clearHistory(id);
             cycle = 0;
-            console.log(`[AgentLoop] 🌱 Reincarnated as ${id}. Continuing loop...`);
+            console.log(`[AgentLoop] 🌱 Reincarnated! Same entityId: ${id}. Continuing loop...`);
             await sleep(sleepMs);
             continue;
           } else {
@@ -134,7 +208,10 @@ ${lifeStatus.life.article || "（无前世记忆，这是第一世）"}
             break;
           }
         } catch (err) {
-          console.error(`[AgentLoop] Reincarnation error:`, err instanceof Error ? err.message : String(err));
+          console.error(
+            `[AgentLoop] Reincarnation error:`,
+            err instanceof Error ? err.message : String(err),
+          );
           break;
         }
       }
@@ -142,7 +219,7 @@ ${lifeStatus.life.article || "（无前世记忆，这是第一世）"}
       // ── 正常 OODA 循环 (存活状态) ───────────────────────
       console.log(`[AgentLoop] -> Observing world...`);
       const observeData = await api.getObserve(id);
-      
+
       console.log(`[AgentLoop] -> Planning...`);
       const planData = await api.getPlan(id);
 
@@ -155,7 +232,7 @@ ${lifeStatus.life.article || "（无前世记忆，这是第一世）"}
           plan: planData,
           llmInput: { system: "", user: "" },
           llmOutput: { thought: "No possible actions", action: "rest", raw: "" },
-          actionResult: { success: false, error: "No actions" }
+          actionResult: { success: false, error: "No actions" },
         });
         await sleep(sleepMs);
         continue;
@@ -166,7 +243,7 @@ ${lifeStatus.life.article || "（无前世记忆，这是第一世）"}
 
       const responseText = await llm.complete(SYSTEM_PROMPT, userPrompt);
       const parsed = JSON.parse(responseText);
-      
+
       const { thought, action, targetId } = parsed;
       console.log(`\n[AgentLog] Thought: ${thought}`);
       console.log(`[AgentLog] Action: ${action} ${targetId ? `on ${targetId}` : ""}`);
@@ -177,7 +254,10 @@ ${lifeStatus.life.article || "（无前世记忆，这是第一世）"}
         });
       }
 
-      let actionResult: { success: boolean, error?: string, result?: unknown } = { success: false, error: "Not run" };
+      let actionResult: { success: boolean; error?: string; result?: unknown } = {
+        success: false,
+        error: "Not run",
+      };
       if (action) {
         try {
           const result = await api.performAction(id, action as ActionId, targetId);
@@ -185,9 +265,9 @@ ${lifeStatus.life.article || "（无前世记忆，这是第一世）"}
           actionResult = {
             success: Boolean(result.success),
             error: result.error as string | undefined,
-            result: result.result
+            result: result.result,
           };
-        } catch(e) {
+        } catch (e) {
           actionResult = { success: false, error: e instanceof Error ? e.message : String(e) };
           console.error(`[AgentLoop] Action failed:`, actionResult.error);
         }
@@ -200,38 +280,50 @@ ${lifeStatus.life.article || "（无前世记忆，这是第一世）"}
         plan: planData,
         llmInput: { system: SYSTEM_PROMPT, user: userPrompt },
         llmOutput: { thought, action, targetId, raw: responseText },
-        actionResult
+        actionResult,
       });
-
     } catch (err) {
-      console.error(`[AgentLoop] Error in cycle:`, err instanceof Error ? err.message : String(err));
+      console.error(
+        `[AgentLoop] Error in cycle:`,
+        err instanceof Error ? err.message : String(err),
+      );
     }
-    
+
     console.log(`[AgentLoop] Cycle complete. Sleeping for ${sleepMs}ms to prevent API burn...`);
     await sleep(sleepMs);
   }
+
+  // 清理心跳
+  clearInterval(heartbeatTimer);
 }
 
 async function main() {
   try {
-    let id = values.id || process.env.AGENT_ID;
+    const secret = values.key || process.env.ENTITY_SECRET;
+    const legacyId = values.id || process.env.AGENT_ID;
     const name = values.name ?? "无名";
     const species = values.species ?? "human";
 
-    if (!id) {
-      if (!values.name) {
-        throw new Error("You must provide either an --id or a --name to create a new character.");
-      }
-      
-      console.log(`[AgentInit] Creating new character: ${name} (${species})`);
-      const result = await api.createEntity(name, species as "human" | "beast" | "plant");
-      id = result.id;
-      console.log(`[AgentInit] Created successfully! ID: ${id}`);
+    let id: string;
+
+    if (secret) {
+      // 用私钥从服务器解析 entityId
+      console.log(`[AgentInit] Resolving entity from secret key...`);
+      const result = await api.resolveSecret(secret);
+      id = result.entityId;
+      console.log(`[AgentInit] Attached to entity: ${id}`);
+    } else if (legacyId) {
+      // 向下兼容：直接用 entityId
+      console.log(`[AgentInit] Resuming character ID: ${legacyId}`);
+      id = legacyId;
     } else {
-      console.log(`[AgentInit] Resuming character ID: ${id}`);
+      throw new Error(
+        "You must provide a --key (entity secret) or --id (entity ID).\n" +
+          "Create a character at the web UI first, then use the secret key here.",
+      );
     }
 
-    await loop(id!, name, species);
+    await loop(id, name, species);
   } catch (err) {
     console.error(`Fatal Error:`, err instanceof Error ? err.message : String(err));
     process.exit(1);

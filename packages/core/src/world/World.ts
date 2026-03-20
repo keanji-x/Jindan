@@ -469,30 +469,41 @@ export class World {
     newName: string,
     newSpecies: SpeciesType,
   ): { success: boolean; entity?: Entity; error?: string } {
-    const oldEntity = this.ledger.getEntity(entityId);
-    if (!oldEntity) return { success: false, error: "实体不存在" };
-    if (oldEntity.status !== "entombed") {
-      return { success: false, error: `实体状态为「${oldEntity.status}」，只有安息者才能转生` };
+    const entity = this.ledger.getEntity(entityId);
+    if (!entity) return { success: false, error: "实体不存在" };
+    if (entity.status !== "entombed") {
+      return { success: false, error: `实体状态为「${entity.status}」，只有安息者才能转生` };
     }
 
-    // Create new entity
-    const newEntity = createEntity(newName, newSpecies, this.ledger.qiPool.state);
-    // Inherit soul identity and article from past life
-    newEntity.soulId = oldEntity.soulId;
-    newEntity.life.article = oldEntity.life.article;
-    this.ledger.setEntity(newEntity);
+    const oldName = entity.name;
+    const oldSpecies = entity.species;
+    const pastArticle = entity.life.article;
+
+    // 用 factory 创建一个临时蓝图获取初始组件数据
+    const blueprint = createEntity(newName, newSpecies, this.ledger.qiPool.state);
+
+    // 原地重置：保留 id 和 soulId，重置一切其他属性
+    entity.name = newName;
+    entity.species = newSpecies;
+    entity.sentient = blueprint.sentient;
+    entity.status = "alive";
+    entity.components = blueprint.components;
+    entity.life = {
+      article: pastArticle, // 携带前世记忆
+      events: [],
+    };
 
     this.events.emit({
       tick: this._tick,
       type: "entity_reincarnated",
       data: {
-        oldEntity: { id: oldEntity.id, name: oldEntity.name, species: oldEntity.species },
-        newEntity: { id: newEntity.id, name: newEntity.name, species: newEntity.species },
-        articleLength: newEntity.life.article.length,
+        oldEntity: { id: entity.id, name: oldName, species: oldSpecies },
+        newEntity: { id: entity.id, name: newName, species: newSpecies },
+        articleLength: pastArticle.length,
       },
-      message: `🔄「${oldEntity.name}」转生为「${newName}」，携带前世记忆（${newEntity.life.article.length}字）`,
+      message: `🔄「${oldName}」转生为「${newName}」，携带前世记忆（${pastArticle.length}字）`,
     });
 
-    return { success: true, entity: newEntity };
+    return { success: true, entity };
   }
 }

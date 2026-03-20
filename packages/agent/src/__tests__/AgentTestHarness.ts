@@ -5,8 +5,8 @@
 // Two LLM modes: Scripted (deterministic) and Heuristic (rules)
 // ============================================================
 
-import { World } from "@jindan/core";
 import type { ActionId, AvailableAction, Entity } from "@jindan/core";
+import { World } from "@jindan/core";
 
 // ── Chat Log ────────────────────────────────────────────────
 
@@ -78,9 +78,7 @@ export class ChatLog {
       lines.push(
         `- **Action**: ${r.llmOutput.action}${r.llmOutput.targetId ? ` → ${r.llmOutput.targetId}` : ""}`,
       );
-      lines.push(
-        `- **Result**: ${r.actionResult.success ? "✅" : `❌ ${r.actionResult.error}`}`,
-      );
+      lines.push(`- **Result**: ${r.actionResult.success ? "✅" : `❌ ${r.actionResult.error}`}`);
       lines.push(
         `- **After**: Qi ${r.postState.qi}/${r.postState.maxQi} | Realm ${r.postState.realm} | Status: ${r.postState.entityStatus}`,
       );
@@ -103,10 +101,7 @@ export class ScriptedLlm {
   private idx = 0;
   constructor(private readonly script: LlmDecision[]) {}
 
-  decide(
-    _observe: CycleRecord["observe"],
-    _plan: AvailableAction[],
-  ): LlmDecision {
+  decide(_observe: CycleRecord["observe"], _plan: AvailableAction[]): LlmDecision {
     if (this.idx >= this.script.length) {
       return { thought: "脚本已耗尽，休息", action: "rest" };
     }
@@ -116,10 +111,7 @@ export class ScriptedLlm {
 
 /** Heuristic mock: uses simple rules to make decisions (like a real AI would) */
 export class HeuristicLlm {
-  decide(
-    observe: CycleRecord["observe"],
-    plan: AvailableAction[],
-  ): LlmDecision {
+  decide(observe: CycleRecord["observe"], plan: AvailableAction[]): LlmDecision {
     const possible = plan.filter((a) => a.possible);
     if (possible.length === 0) {
       return { thought: "没有可执行的行动，只能休息", action: "rest" };
@@ -154,10 +146,7 @@ export class HeuristicLlm {
 
     // Priority 3: Meditate to fill up
     const meditate = possible.find(
-      (a) =>
-        a.action === "meditate" ||
-        a.action === "moonlight" ||
-        a.action === "photosynth",
+      (a) => a.action === "meditate" || a.action === "moonlight" || a.action === "photosynth",
     );
     if (meditate) {
       return {
@@ -191,10 +180,7 @@ export class AgentHarness {
     this.log = new ChatLog();
     this.llm = opts.llm;
 
-    const entity = this.world.createEntity(
-      opts.entityName,
-      opts.species ?? "human",
-    );
+    const entity = this.world.createEntity(opts.entityName, opts.species ?? "human");
     this._entityId = entity.id;
   }
 

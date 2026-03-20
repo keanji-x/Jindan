@@ -220,10 +220,44 @@ describe("Tomb System (坟墓系统)", () => {
     const rein2 = world.reincarnate(rein1.entity!.id, "三世", "plant");
     expect(rein2.entity!.soulId).toBe(originalSoulId);
 
-    // All three tombstones share the same soulId
+    // Inplace reincarnation: the entity is alive now, so no dead records exist
     const dead = world.getDeadEntities();
     const sameSoul = dead.filter((e) => e.soulId === originalSoulId);
-    expect(sameSoul.length).toBe(2); // prey and rein1 (rein2 is alive)
+    expect(sameSoul.length).toBe(0); // entity is alive as rein2
+
+    // Kill rein2 → graveyard should have exactly 1 entry for this soul
+    forceKill(world, rein2.entity!.id);
+    world.performTomb(rein2.entity!.id);
+    const deadAfter = world.getDeadEntities();
+    const sameSoulAfter = deadAfter.filter((e) => e.soulId === originalSoulId);
+    expect(sameSoulAfter.length).toBe(1);
+
+    vi.useRealTimers();
+  });
+
+  it("转生后 entityId 保持不变（原地重置）", () => {
+    const { world, prey } = createTestWorld();
+    const originalId = prey.id;
+
+    // 第一次：死亡 → 盖棺 → 转生
+    forceKill(world, prey.id);
+    world.performTomb(prey.id);
+    const rein1 = world.reincarnate(prey.id, "二世", "beast");
+    expect(rein1.success).toBe(true);
+    expect(rein1.entity!.id).toBe(originalId);
+
+    // 第二次：再死 → 再盖棺 → 再转生（换物种）
+    forceKill(world, rein1.entity!.id);
+    world.performTomb(rein1.entity!.id);
+    const rein2 = world.reincarnate(rein1.entity!.id, "三世", "plant");
+    expect(rein2.success).toBe(true);
+    expect(rein2.entity!.id).toBe(originalId);
+
+    // 通过 world.getEntity(originalId) 仍能查到最新状态
+    const fetched = world.getEntity(originalId);
+    expect(fetched).toBeDefined();
+    expect(fetched!.name).toBe("三世");
+    expect(fetched!.status).toBe("alive");
 
     vi.useRealTimers();
   });

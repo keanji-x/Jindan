@@ -9,7 +9,7 @@ const skillPath = path.resolve(__dirname, "../../../.agents/skills/play-jindan/S
 let skillContent = "";
 try {
   skillContent = fs.readFileSync(skillPath, "utf-8");
-} catch (err) {
+} catch (_err) {
   console.warn(`[AgentWarning] Could not load SKILL.md at ${skillPath}`);
 }
 
@@ -33,7 +33,7 @@ ${skillContent}
 注意必须严格按照上述格式返回合法的JSON！绝不要瞎编乱造不存在的动作。
 `;
 
-export function generateUserPrompt(observeData: any, planData: any): string {
+export function generateUserPrompt(observeData: unknown, planData: unknown): string {
   return `
 当前的感知信息 (Observe): 
 ${JSON.stringify(observeData, null, 2)}
