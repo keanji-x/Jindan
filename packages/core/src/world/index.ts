@@ -2,7 +2,8 @@
 // world/ barrel export
 // ============================================================
 
-export { ABSORB_CONFIG, BREAKTHROUGH_CONFIG, DEVOUR_CONFIG } from "./config.js";
-export * from "./qi/index.js";
+export { ABSORB_CONFIG, BREAKTHROUGH_CONFIG } from "./config/index.js";
+export { EventGraph } from "./EventGraph.js";
+export { QiPoolManager } from "./QiPoolManager.js";
 export type * from "./types.js";
 export { World } from "./World.js";

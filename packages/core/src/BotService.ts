@@ -9,8 +9,8 @@ import { createHash, randomBytes } from "node:crypto";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { AgentRelay, type ChatReply } from "./AgentRelay.js";
-import type { ActionId } from "./entity/types.js";
 import type { StorageBackend } from "./storage/StorageBackend.js";
+import type { ActionId } from "./world/types.js";
 import type { World } from "./world/World.js";
 
 // ── JWT 密钥 ──────────────────────────────────────────────
@@ -168,7 +168,6 @@ export class BotService {
           name: e?.name || "未知",
           species: e?.species || "human",
           realm: e?.components?.cultivation?.realm,
-          power: e?.components?.combat?.power,
         };
       })
       .filter((c) => c.name !== "未知"); // skip dead/missing entities

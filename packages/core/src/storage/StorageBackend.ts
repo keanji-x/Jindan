@@ -1,5 +1,4 @@
-import type { Entity } from "../entity/types.js";
-import type { LedgerEvent, QiPoolState } from "../ledger/types.js";
+import type { Entity, QiPoolState, WorldEventRecord } from "../world/types.js";
 
 /** 用户账户记录 */
 export interface UserRecord {
@@ -9,7 +8,7 @@ export interface UserRecord {
 
 /**
  * 存储后端接口。
- * 运行时 WorldLedger 通过此接口读写实体、事件和灵气池状态。
+ * 运行时 World 通过此接口读写实体、事件和灵气池状态。
  * 内存后端 (MemoryStorage) 和 PG 后端 (PgStorage) 均实现此接口。
  */
 export interface StorageBackend {
@@ -30,11 +29,11 @@ export interface StorageBackend {
 
   // ── Event Append / Query ───────────────────────────────
 
-  appendEvent(event: LedgerEvent): void;
-  getEventsBySource(sourceId: string): LedgerEvent[];
-  getEventsByTarget(targetId: string): LedgerEvent[];
-  getEventsByTick(startTick: number, endTick: number): LedgerEvent[];
-  getAllEvents(): LedgerEvent[];
+  appendEvent(event: WorldEventRecord): void;
+  getEventsBySource(sourceId: string): WorldEventRecord[];
+  getEventsByTarget(targetId: string): WorldEventRecord[];
+  getEventsByTick(startTick: number, endTick: number): WorldEventRecord[];
+  getAllEvents(): WorldEventRecord[];
   getEventCount(): number;
 
   /** 遗忘窗口：保留最新的 keepCount 条事件，丢弃更早的 */

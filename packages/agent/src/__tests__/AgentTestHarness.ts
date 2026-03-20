@@ -202,7 +202,6 @@ export class AgentHarness {
     const qi = tank.tanks[core];
     const maxQi = tank.maxTanks[core];
     const cult = entity.components.cultivation;
-    const combat = entity.components.combat;
     const snapshot = this.world.getSnapshot();
 
     // ── Observe ──
@@ -213,7 +212,7 @@ export class AgentHarness {
       maxQi,
       qiRatio: qi / maxQi,
       realm: cult?.realm ?? 0,
-      power: combat?.power ?? 0,
+      power: 0,
       worldTick: this.world.tick,
       aliveCount: snapshot.entities.length,
       ambientQl: snapshot.ambientPool.pools.ql,

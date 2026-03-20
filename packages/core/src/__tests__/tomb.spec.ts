@@ -20,7 +20,7 @@ describe("Tomb System (坟墓系统)", () => {
     const tank = entity.components.tank!;
 
     // Dump all particles back to ambient (simulate chain collapse)
-    const ambient = world.ledger.qiPool.state;
+    const ambient = world.qiPool.state;
     for (const [pid, amount] of Object.entries(tank.tanks)) {
       if (amount > 0) {
         ambient.pools[pid] = (ambient.pools[pid] ?? 0) + amount;

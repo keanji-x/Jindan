@@ -42,3 +42,11 @@ fix:
 # 代码格式化排版
 fmt:
     npm run fmt
+
+# 运行核心测试
+test:
+    npm test -w @jindan/core
+
+# 运行平衡调优 (模拟退火)
+optimize:
+    npm exec -w @jindan/core -- tsx tools/optimize/optimize.ts

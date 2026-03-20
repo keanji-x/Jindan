@@ -1,13 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { EventBus } from "../EventBus.js";
-import { BALANCE } from "../engine/balance.config.js";
-import { UNIVERSE } from "../engine/index.js";
-import { applyParams } from "../engine/TunableParams.js";
-import type { ActionContext } from "../entity/actions/types.js";
-import type { Entity } from "../entity/types.js";
-import { doAbsorb } from "../world/AbsorbSystem.js";
-import { doBreakthrough } from "../world/BreakthroughSystem.js";
-import type { WorldEvent } from "../world/types.js";
+import { BALANCE } from "../world/config/balance.config.js";
+import { applyParams } from "../world/config/TunableParams.js";
+import { UNIVERSE } from "../world/config/universe.config.js";
+import { doAbsorb } from "../world/systems/absorb/handler.js";
+import { doBreakthrough } from "../world/systems/breakthrough/handler.js";
+import type { ActionContext } from "../world/systems/types.js";
+import type { Entity, WorldEvent } from "../world/types.js";
 
 function makeHuman(qi: number, maxQi = 200, realm = 1): Entity {
   return {
@@ -25,7 +24,6 @@ function makeHuman(qi: number, maxQi = 200, realm = 1): Entity {
         coreParticle: "ql" as const,
       },
       cultivation: { realm },
-      combat: { power: 10 },
     },
   };
 }

@@ -17,7 +17,7 @@ describe("诊断：游戏系统核心机制", () => {
     const maxQi = tank.maxTanks[core]!;
 
     // 工厂初始化为 20% 灵气，手动填满以测试满罐打坐
-    const ambient = world.ledger.qiPool.state;
+    const ambient = world.qiPool.state;
     const deficit = maxQi - (tank.tanks[core] ?? 0);
     tank.tanks[core] = maxQi;
     ambient.pools[core] = (ambient.pools[core] ?? 0) - deficit;
@@ -44,7 +44,7 @@ describe("诊断：游戏系统核心机制", () => {
     const maxQi = tank.maxTanks[core]!;
 
     // 手动降低灵气到 ~50% 当前值
-    const ambient = world.ledger.qiPool.state;
+    const ambient = world.qiPool.state;
     const currentQi = tank.tanks[core] ?? 0;
     const drain = Math.floor(currentQi * 0.5);
     tank.tanks[core] = currentQi - drain;

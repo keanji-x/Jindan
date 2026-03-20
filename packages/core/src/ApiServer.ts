@@ -8,12 +8,11 @@ import { extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type WebSocket, WebSocketServer } from "ws";
 import { BotService } from "./BotService.js";
-import { UNIVERSE } from "./engine/index.js";
-import { AiRegistry } from "./entity/ai/AiRegistry.js";
-import type { ActionId } from "./entity/types.js";
 import { attachFileLogger } from "./logger.js";
 import type { StorageBackend } from "./storage/StorageBackend.js";
-import type { WorldEvent } from "./world/types.js";
+import { AiRegistry } from "./world/ai/AiRegistry.js";
+import { UNIVERSE } from "./world/config/universe.config.js";
+import type { ActionId, WorldEvent } from "./world/types.js";
 import { World } from "./world/World.js";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
@@ -71,7 +70,7 @@ export class ApiServer {
   constructor(options?: { world?: World; storage?: StorageBackend }) {
     const storage = options?.storage;
     this.world = options?.world ?? new World(storage);
-    this.bot = new BotService(this.world, storage ?? this.world.ledger.storage);
+    this.bot = new BotService(this.world, storage ?? this.world.storage);
     this.http = createServer(this.handle.bind(this));
     this.wss = new WebSocketServer({ server: this.http });
 
@@ -128,7 +127,7 @@ export class ApiServer {
               const tank = npc.components.tank;
               const core = tank?.coreParticle ?? "ql";
               const qiRatio = tank ? (tank.tanks[core] ?? 0) / (tank.maxTanks[core] ?? 1) : 0;
-              const recentEvents = this.world.ledger.graph.getRecentForEntity(npc.id);
+              const recentEvents = this.world.eventGraph.getRecentForEntity(npc.id);
 
               const decision = brain.decide(actions, { qiRatio, recentEvents });
               if (decision) {
@@ -275,7 +274,7 @@ export class ApiServer {
         if (!e) throw new ApiError("Entity not found");
 
         const tick = this.world.tick;
-        this.world.ledger.recordEvent({
+        this.world.recordEvent({
           tick,
           sourceId: id,
           type: "report",
@@ -313,7 +312,7 @@ export class ApiServer {
 
       if (parts[3] === "observe") {
         const snapshot = this.world.getSnapshot();
-        const recentEvents = this.world.ledger.graph.getEventsByTick(
+        const recentEvents = this.world.eventGraph.getEventsByTick(
           this.world.tick - 3,
           this.world.tick,
         );
@@ -327,7 +326,7 @@ export class ApiServer {
       }
 
       if (parts[3] === "memory") {
-        return this.world.ledger.graph.getEntityHistory(id);
+        return this.world.eventGraph.getEntityHistory(id);
       }
 
       if (parts[3] === "plan") {
@@ -359,10 +358,8 @@ export class ApiServer {
         .getAliveEntities()
         .sort((a, b) => {
           const aRealm = a.components.cultivation?.realm ?? 0;
-          const aPower = a.components.combat?.power ?? 0;
           const bRealm = b.components.cultivation?.realm ?? 0;
-          const bPower = b.components.combat?.power ?? 0;
-          return bRealm * 1000 + bPower - (aRealm * 1000 + aPower);
+          return bRealm - aRealm;
         })
         .map((e, i) => {
           const tank = e.components.tank;
@@ -373,7 +370,6 @@ export class ApiServer {
             name: e.name,
             species: e.species,
             realm: e.components.cultivation?.realm ?? 0,
-            power: e.components.combat?.power ?? 0,
             qi: tank?.tanks[core] ?? 0,
             maxQi: tank?.maxTanks[core] ?? 0,
           };

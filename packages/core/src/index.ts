@@ -1,25 +1,30 @@
 // ============================================================
-// @jindan/core — barrel export (v3 reactor engine)
+// @jindan/core — barrel export
 // ============================================================
 
 export { ApiServer } from "./ApiServer.js";
 // Infrastructure
 export { EventBus } from "./EventBus.js";
-// Engine layer (NEW)
-export type * from "./engine/index.js";
-export { solve, solveDrain, UNIVERSE } from "./engine/index.js";
-// Entity layer
-export type * from "./entity/index.js";
-export { ActionRegistry, createEntity, SPECIES } from "./entity/index.js";
 // Storage layer
 export type { StorageBackend } from "./storage/index.js";
 export { MemoryStorage, PgStorage } from "./storage/index.js";
-// World layer
-export type * from "./world/index.js";
+// Config layer (universe physics)
+export type * from "./world/config/index.js";
+export { UNIVERSE } from "./world/config/index.js";
+export { createEntity } from "./world/factory.js";
 export {
   ABSORB_CONFIG,
   BREAKTHROUGH_CONFIG,
-  DEVOUR_CONFIG,
-  QI_CONFIG,
   World,
 } from "./world/index.js";
+// World layer (primary)
+export { ActionRegistry } from "./world/systems/ActionRegistry.js";
+export type { GameSystem } from "./world/systems/GameSystem.js";
+export type { ActionDef } from "./world/systems/types.js";
+export type {
+  ActionId,
+  AvailableAction,
+  Entity,
+  SpeciesType,
+  WorldEvent,
+} from "./world/types.js";

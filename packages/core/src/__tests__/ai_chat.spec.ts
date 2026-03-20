@@ -11,8 +11,8 @@ test("AI Chat functionality", () => {
 
   expect(result.success).toBe(true);
 
-  // 2. Target entity's recentEvents in WorldLedger receives the chat
-  const recentEvents = world.ledger.graph.getRecentForEntity(ai1.id);
+  // 2. Target entity's recentEvents in EventGraph receives the chat
+  const recentEvents = world.eventGraph.getRecentForEntity(ai1.id);
   const chatEvent = recentEvents.find((e) => (e.type as string) === "entity_chat");
   expect(chatEvent).toBeDefined();
   expect(chatEvent?.sourceId).toBe(player1.id);
