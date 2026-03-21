@@ -1,0 +1,93 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { BotService } from "../BotService.js";
+import { World } from "../world/World.js";
+
+describe("BotService", () => {
+  let bot: BotService;
+  let mockWorld: any;
+  let mockStorage: any;
+
+  beforeEach(() => {
+    process.env.JWT_SECRET = "testsecret";
+
+    mockWorld = {
+      createEntity: vi
+        .fn()
+        .mockImplementation((name, sp) => ({ id: "e1", name, species: sp, status: "alive" })),
+      getEntity: vi.fn(),
+      performAction: vi.fn(),
+    };
+
+    const users: Record<string, any> = {};
+    const secrets: Record<string, string> = {};
+
+    mockStorage = {
+      hasUser: vi.fn((uname) => !!users[uname]),
+      setUser: vi.fn((uname, data) => {
+        users[uname] = data;
+      }),
+      getUser: vi.fn((uname) => users[uname]),
+      setSecret: vi.fn((id, hash) => {
+        secrets[id] = hash;
+      }),
+      getSecret: vi.fn((id) => secrets[id]),
+      getEntityIdBySecret: vi.fn((hash) => Object.keys(secrets).find((k) => secrets[k] === hash)),
+      removeEntity: vi.fn(),
+    };
+
+    bot = new BotService(mockWorld as any, mockStorage as any);
+  });
+
+  it("should register and login a user successfully", () => {
+    const res = bot.register("user1", "securepass", "testcode");
+    expect(res.token).toBeDefined();
+    expect(res.user.username).toBe("user1");
+
+    const loginRes = bot.userLogin("user1", "securepass");
+    expect(loginRes.token).toBeDefined();
+
+    expect(() => bot.userLogin("user1", "wrong")).toThrow(/用户名或密码错误/);
+  });
+
+  it("should create character for user and login as bot", () => {
+    bot.register("user1", "securepass", "testcode");
+    const loginRes = bot.userLogin("user1", "securepass");
+
+    const charRes = bot.createCharacterForUser(loginRes.token, "MyChar", "human");
+    expect(charRes.entityId).toBe("e1");
+    expect(charRes.secret).toBeDefined();
+
+    mockWorld.getEntity.mockReturnValue({ id: "e1", name: "MyChar", species: "human" });
+
+    const authRes = bot.authenticate(charRes.secret);
+    expect(authRes.token).toBeDefined();
+    expect(authRes.entityId).toBe("e1");
+  });
+
+  it("should return theme messages if chatting with dead entity", async () => {
+    bot.register("u1", "pass", "testcode");
+    const loginRes = bot.userLogin("u1", "pass");
+    const char = bot.createCharacterForUser(loginRes.token, "C1", "human");
+
+    mockWorld.getEntity.mockReturnValue({ id: "e1", status: "lingering", name: "C1" });
+    const authRes = bot.authenticate(char.secret);
+
+    const reply = await bot.chat(authRes.token, "hello");
+    expect(reply.reply).toMatch(/灵魂飘荡/);
+  });
+
+  it("should enqueue chat if alive", async () => {
+    bot.register("u1", "pass", "testcode");
+    const char = bot.createCharacterForUser(bot.userLogin("u1", "pass").token, "C1", "human");
+
+    mockWorld.getEntity.mockReturnValue({ id: "e1", status: "alive", name: "C1" });
+    const token = bot.authenticate(char.secret).token;
+    bot.relay.heartbeat("e1"); // make online
+
+    // mock enqueueChat rather than waiting
+    vi.spyOn(bot.relay, "enqueueChat").mockResolvedValue({ reply: "bounced" });
+
+    const reply = await bot.chat(token, "msg");
+    expect(reply.reply).toBe("bounced");
+  });
+});

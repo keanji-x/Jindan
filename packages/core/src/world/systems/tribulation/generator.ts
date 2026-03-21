@@ -27,23 +27,21 @@ export const TribulationGenerator = {
     // Calculate how many lightning strikes based on realm
     const strikeCount = targetRealm;
 
-    // Build the thunder stages
+    // Build all thunder nodes first
     for (let i = 1; i <= strikeCount; i++) {
-      const nodeId = `thunder_${i}`;
       graph.nodes.push({
-        nodeId,
-        actionId: "lightning_strike", // Assuming this is defined in systems
+        nodeId: `thunder_${i}`,
+        actionId: "lightning_strike",
       });
+    }
 
-      // Link to the next strike
-      if (i < strikeCount) {
-        const nextNodeId = `thunder_${i + 1}`;
-        GraphValidator.addEdgeSafely(graph, {
-          from: nodeId,
-          to: nextNodeId,
-          condition: "on_success", // only continue if survived the strike
-        });
-      }
+    // Then link them
+    for (let i = 1; i < strikeCount; i++) {
+      GraphValidator.addEdgeSafely(graph, {
+        from: `thunder_${i}`,
+        to: `thunder_${i + 1}`,
+        condition: "on_success",
+      });
     }
 
     // After all strikes, Inner Demon (心魔) for Realm >= 3
