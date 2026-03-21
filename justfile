@@ -3,7 +3,7 @@ set allow-duplicate-recipes := true
 # 启动核心 API 服务器（内存存储，开发用，含 web 前端）
 start_mem:
     npm run build -w @jindan/web
-    npm run dev:core
+    DATABASE_URL=memory npm run dev:core
 
 # 开发模式：web 前端热重载（需配合 start_mem 的 API 服务）
 dev_web:

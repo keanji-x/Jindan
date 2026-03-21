@@ -71,6 +71,19 @@ export interface ReactorTemplate {
   actions: string[];
   /** Amount this species increases the global ambient capacity */
   ambientCapContribution: number;
+  /**
+   * 全局实例上限。undefined = 无限制。
+   * 例如 maxInstances: 1 = 全服唯一（先天灵宝、混沌神器等）
+   * 检查范围：存活实体（entombed 不占名额，神器可重新降世）
+   */
+  maxInstances?: number;
+  /**
+   * NPC 随机名字表。有此字段的物种才会被 SpawnSystem 自动化生。
+   * 没有此字段的物种（如 human、item）只能通过 API 手动创建。
+   */
+  npcNames?: string[];
+  /** NPC 脑类型 ID（AI 策略标识，对应 AiRegistry 里的 brain） */
+  npcBrainId?: string;
 }
 
 // ── Universe Config ──────────────────────────────────────────

@@ -88,11 +88,14 @@ export class PgStorage implements StorageBackend {
         qi_pools JSONB NOT NULL DEFAULT '{}',
         qi_total INTEGER NOT NULL DEFAULT 0,
         tick INTEGER NOT NULL DEFAULT 0,
+        relations JSONB NOT NULL DEFAULT '{}',
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
 
-      INSERT INTO world_state (id, qi_pools, qi_total, tick)
-      VALUES (1, '{}', 0, 0)
+      ALTER TABLE world_state ADD COLUMN IF NOT EXISTS relations JSONB NOT NULL DEFAULT '{}';
+
+      INSERT INTO world_state (id, qi_pools, qi_total, tick, relations)
+      VALUES (1, '{}', 0, 0, '{}')
       ON CONFLICT (id) DO NOTHING;
 
       CREATE TABLE IF NOT EXISTS users (
@@ -266,6 +269,20 @@ export class PgStorage implements StorageBackend {
     return this.secretIndex.get(hashedSecret);
   }
 
+  // ── Relations ──────────────────────────────────────────
+
+  private relations: Record<string, number> = {};
+  private relationsDirty = false;
+
+  getRelations(): Record<string, number> {
+    return this.relations;
+  }
+
+  setRelations(relations: Record<string, number>): void {
+    this.relations = relations;
+    this.relationsDirty = true;
+  }
+
   // ── Persistence Flush ──────────────────────────────────
 
   async flush(): Promise<void> {
@@ -321,11 +338,16 @@ export class PgStorage implements StorageBackend {
         );
       }
 
-      // 3. Flush world state (qi pool + tick)
-      if (this.qiPoolDirty || this.tickDirty) {
+      // 3. Flush world state (qi pool + tick + relations)
+      if (this.qiPoolDirty || this.tickDirty || this.relationsDirty) {
         await client.query(
-          `UPDATE world_state SET qi_pools = $1, qi_total = $2, tick = $3, updated_at = NOW() WHERE id = 1`,
-          [JSON.stringify(this.qiPool.pools), this.qiPool.total, this.tick],
+          `UPDATE world_state SET qi_pools = $1, qi_total = $2, tick = $3, relations = $4, updated_at = NOW() WHERE id = 1`,
+          [
+            JSON.stringify(this.qiPool.pools),
+            this.qiPool.total,
+            this.tick,
+            JSON.stringify(this.relations),
+          ],
         );
       }
 
@@ -363,6 +385,7 @@ export class PgStorage implements StorageBackend {
       this.newEvents = [];
       this.qiPoolDirty = false;
       this.tickDirty = false;
+      this.relationsDirty = false;
       this.dirtyUsers.clear();
       this.dirtySecrets.clear();
     } catch (err) {
@@ -442,6 +465,7 @@ export class PgStorage implements StorageBackend {
         total: row.qi_total ?? 0,
       };
       this.tick = row.tick ?? 0;
+      this.relations = row.relations ?? {};
     }
 
     // Load users

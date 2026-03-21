@@ -23,6 +23,12 @@ export interface EvalOptions {
   maxIterations?: number;
 }
 
+export interface RobustScore {
+  mean: WorldScore;
+  std: WorldScore;
+  fitness: number; // mean.total - α * std.total
+}
+
 export function evaluateWorld(opts: EvalOptions): WorldScore {
   const world = new World();
   const player = world.createEntity("评测者", "human");
@@ -151,4 +157,36 @@ export function evaluateWorld(opts: EvalOptions): WorldScore {
     ambientEntityRatio,
     shaLingRatio,
   };
+}
+
+/** Run multiple independent simulations and return mean / std / fitness. */
+export function evaluateWorldRobust(
+  opts: EvalOptions & { runs?: number; alpha?: number },
+): RobustScore {
+  const runs = opts.runs ?? 5;
+  const alpha = opts.alpha ?? 0.5;
+  const scores = Array.from({ length: runs }, () => evaluateWorld(opts));
+
+  const keys: (keyof WorldScore)[] = [
+    "total",
+    "playerSurvival",
+    "speciesDiversity",
+    "breakthroughRate",
+    "ecosystemHealth",
+    "ambientEntityRatio",
+    "shaLingRatio",
+  ];
+
+  const mean = {} as WorldScore;
+  const std = {} as WorldScore;
+
+  for (const k of keys) {
+    const vals = scores.map((s) => s[k]);
+    const m = vals.reduce((a, b) => a + b, 0) / runs;
+    const variance = vals.reduce((a, v) => a + (v - m) ** 2, 0) / runs;
+    mean[k] = m;
+    std[k] = Math.sqrt(variance);
+  }
+
+  return { mean, std, fitness: mean.total - alpha * std.total };
 }

@@ -6,14 +6,15 @@
 
 import type { Life } from "../memory/types.js";
 import type { ParticleId } from "./config/types.js";
+import type { ActiveGraph } from "./effects/types.js";
 
 // ── Entity Types ──────────────────────────────────────────────
 
 /** Action 唯一标识 (开放 string，便于扩展新 System) */
 export type ActionId = string;
 
-/** 物种类型 */
-export type SpeciesType = "human" | "beast" | "plant";
+/** 物种类型 — 开放 string，由 UNIVERSE.reactors 注册表驱动 */
+export type SpeciesType = string;
 
 /** 实体生命状态 */
 export type LifeStatus = "alive" | "lingering" | "entombed";
@@ -48,7 +49,18 @@ export interface Entity {
     tank?: TankComponent;
     cultivation?: CultivationComponent;
     brain?: { id: string };
+    actionGraph?: ActiveGraph;
   };
+}
+
+// ── Relation Types ───────────────────────────────────────────
+
+/** 两个实体之间的关系键 — 无序对，字典序较小的 ID 在前 */
+export type RelationKey = `${string}:${string}`;
+
+/** 构造标准化的关系键（保证 get(a,b) === get(b,a)） */
+export function makeRelationKey(a: string, b: string): RelationKey {
+  return a < b ? `${a}:${b}` : `${b}:${a}`;
 }
 
 // ── World State Types ────────────────────────────────────────

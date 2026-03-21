@@ -8,35 +8,43 @@
 
 import { anneal } from "./ParamSearch.js";
 import { applyParams, DEFAULT_PARAMS } from "../../src/world/config/TunableParams.js";
-import { evaluateWorld } from "./WorldEvaluator.js";
+import { evaluateWorldRobust } from "./WorldEvaluator.js";
+
+const RUNS = 5;
+const ALPHA = 0.5;
 
 console.log("🔬 金丹世界平衡调优\n");
 
-// 1. Evaluate current defaults
+// 1. Evaluate current defaults (multi-trial)
 applyParams(DEFAULT_PARAMS);
-const baseline = evaluateWorld({ ticks: 50 });
+const baseline = evaluateWorldRobust({ ticks: 50, runs: RUNS, alpha: ALPHA });
 
-console.log("── 当前默认得分 ──");
-console.log(`  总分:        ${baseline.total.toFixed(3)}`);
-console.log(`  生存率:      ${baseline.playerSurvival.toFixed(3)}`);
-console.log(`  多样性:      ${baseline.speciesDiversity.toFixed(3)}`);
-console.log(`  突破率:      ${baseline.breakthroughRate.toFixed(3)}`);
-console.log(`  生态:        ${baseline.ecosystemHealth.toFixed(3)}`);
-console.log(`  灵气分布:    ${(baseline.ambientEntityRatio * 100).toFixed(1)}% (理想 ~50%)`);
-console.log(`  煞/灵比:     ${(baseline.shaLingRatio * 100).toFixed(1)}% (理想 ~40%)`);
+const fmt = (m: number, s: number) => `${m.toFixed(3)} ± ${s.toFixed(3)}`;
+const pct = (m: number, s: number) => `${(m * 100).toFixed(1)}% ± ${(s * 100).toFixed(1)}%`;
+
+console.log("── 当前默认得分 (mean ± std) ──");
+console.log(`  适应度:      ${baseline.fitness.toFixed(3)}`);
+console.log(`  总分:        ${fmt(baseline.mean.total, baseline.std.total)}`);
+console.log(`  生存率:      ${fmt(baseline.mean.playerSurvival, baseline.std.playerSurvival)}`);
+console.log(`  多样性:      ${fmt(baseline.mean.speciesDiversity, baseline.std.speciesDiversity)}`);
+console.log(`  突破率:      ${fmt(baseline.mean.breakthroughRate, baseline.std.breakthroughRate)}`);
+console.log(`  生态:        ${fmt(baseline.mean.ecosystemHealth, baseline.std.ecosystemHealth)}`);
+console.log(`  灵气分布:    ${pct(baseline.mean.ambientEntityRatio, baseline.std.ambientEntityRatio)} (理想 ~50%)`);
+console.log(`  煞/灵比:     ${pct(baseline.mean.shaLingRatio, baseline.std.shaLingRatio)} (理想 ~40%)`);
 
 // 2. Run simulated annealing
-console.log("\n── 模拟退火优化 (100 iterations × 30 ticks) ──");
-const result = anneal({ iterations: 100, ticksPerTrial: 30 });
+console.log(`\n── 模拟退火优化 (100 iterations × 30 ticks × ${RUNS} runs, α=${ALPHA}) ──`);
+const result = anneal({ iterations: 100, ticksPerTrial: 30, runsPerEval: RUNS, alpha: ALPHA });
 
-console.log(`  最佳总分: ${result.bestScore.total.toFixed(3)}`);
-console.log("  得分分解:");
-console.log(`    生存率:      ${result.bestScore.playerSurvival.toFixed(3)}`);
-console.log(`    多样性:      ${result.bestScore.speciesDiversity.toFixed(3)}`);
-console.log(`    突破率:      ${result.bestScore.breakthroughRate.toFixed(3)}`);
-console.log(`    生态:        ${result.bestScore.ecosystemHealth.toFixed(3)}`);
-console.log(`    灵气分布:    ${(result.bestScore.ambientEntityRatio * 100).toFixed(1)}% (理想 ~50%)`);
-console.log(`    煞/灵比:     ${(result.bestScore.shaLingRatio * 100).toFixed(1)}% (理想 ~40%)`);
+console.log(`  最佳适应度: ${result.bestScore.fitness.toFixed(3)}`);
+console.log("  得分分解 (mean ± std):");
+console.log(`    总分:        ${fmt(result.bestScore.mean.total, result.bestScore.std.total)}`);
+console.log(`    生存率:      ${fmt(result.bestScore.mean.playerSurvival, result.bestScore.std.playerSurvival)}`);
+console.log(`    多样性:      ${fmt(result.bestScore.mean.speciesDiversity, result.bestScore.std.speciesDiversity)}`);
+console.log(`    突破率:      ${fmt(result.bestScore.mean.breakthroughRate, result.bestScore.std.breakthroughRate)}`);
+console.log(`    生态:        ${fmt(result.bestScore.mean.ecosystemHealth, result.bestScore.std.ecosystemHealth)}`);
+console.log(`    灵气分布:    ${pct(result.bestScore.mean.ambientEntityRatio, result.bestScore.std.ambientEntityRatio)} (理想 ~50%)`);
+console.log(`    煞/灵比:     ${pct(result.bestScore.mean.shaLingRatio, result.bestScore.std.shaLingRatio)} (理想 ~40%)`);
 console.log("  最佳参数:");
 for (const [k, v] of Object.entries(result.bestParams) as [string, number][]) {
   const def = (DEFAULT_PARAMS as unknown as Record<string, number>)[k]!;

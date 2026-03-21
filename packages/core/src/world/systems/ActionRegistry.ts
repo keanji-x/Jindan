@@ -13,11 +13,11 @@
 
 import type { SpeciesType } from "../types.js";
 import type { GameSystem } from "./GameSystem.js";
-import type { ActionDef, ActionHandler } from "./types.js";
+import type { ActionDef, ActionHandler, ActionResolver } from "./types.js";
 
 const allActions: ActionDef[] = [];
 const byId = new Map<string, ActionDef>();
-const handlers = new Map<string, ActionHandler>();
+const handlers = new Map<string, ActionHandler | ActionResolver>();
 const registeredSystems: GameSystem[] = [];
 
 /** Global action registry (singleton) */
@@ -43,7 +43,7 @@ export const ActionRegistry = {
   },
 
   /** Get registered execution handler for an action */
-  getHandler(id: string): ActionHandler | undefined {
+  getHandler(id: string): ActionHandler | ActionResolver | undefined {
     return handlers.get(id);
   },
 

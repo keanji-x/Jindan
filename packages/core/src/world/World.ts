@@ -11,14 +11,20 @@ import { nanoid } from "nanoid";
 import { EventBus } from "../EventBus.js";
 import { MemoryStorage } from "../storage/MemoryStorage.js";
 import type { StorageBackend } from "../storage/StorageBackend.js";
+import { BeingLedger } from "./beings/BeingLedger.js";
 import { BALANCE } from "./config/balance.config.js";
 import { applyParams } from "./config/TunableParams.js";
 import { UNIVERSE } from "./config/universe.config.js";
 import { EventGraph } from "./EventGraph.js";
+import { EffectPipeline } from "./effects/EffectPipeline.js";
+import { GraphRegistry } from "./effects/GraphRegistry.js";
+import type { ActionOutcome, Effect } from "./effects/types.js";
 import { createEntity } from "./factory.js";
 import { Formatters } from "./formatters.js";
 import { QiPoolManager } from "./QiPoolManager.js";
+import { RelationGraph } from "./RelationGraph.js";
 import { ParticleTransfer } from "./reactor/ParticleTransfer.js";
+import { Reactor } from "./reactor/Reactor.js";
 import { ActionRegistry } from "./systems/ActionRegistry.js";
 import { AbsorbSystem } from "./systems/absorb/index.js";
 import { BreakthroughSystem } from "./systems/breakthrough/index.js";
@@ -45,6 +51,8 @@ export class World {
   public readonly storage: StorageBackend;
   public readonly qiPool: QiPoolManager;
   public readonly eventGraph: EventGraph;
+  public readonly relations: RelationGraph;
+  public readonly effectPipeline: EffectPipeline;
   private _tick: number = 0;
 
   constructor(storage?: StorageBackend) {
@@ -61,6 +69,8 @@ export class World {
       this.storage,
     );
     this.eventGraph = new EventGraph(this.storage, UNIVERSE.ledgerWindowSize);
+    this.relations = new RelationGraph(this.storage);
+    this.effectPipeline = new EffectPipeline();
 
     this.registerSystems();
 
@@ -101,6 +111,7 @@ export class World {
   }
 
   private registerSystems() {
+    ActionRegistry._reset();
     ActionRegistry.registerSystem(AbsorbSystem);
     ActionRegistry.registerSystem(BreakthroughSystem);
     ActionRegistry.registerSystem(DevourSystem);
@@ -169,7 +180,23 @@ export class World {
   // ── Entity Creation ──────────────────────────────────────
 
   createEntity(name: string, species: SpeciesType): Entity {
-    const entity = createEntity(name, species, this.qiPool.state);
+    // ── 生灵账本守门（全局位格 + 物种配额） ──────────────
+    const aliveEntities = this.getAliveEntities();
+    if (
+      !BeingLedger.canAcquire(species, aliveEntities, this.qiPool.state, UNIVERSE.totalParticles)
+    ) {
+      const reactor = UNIVERSE.reactors[species];
+      throw new Error(`「${reactor?.name ?? species}」无法创建：世界位格已满或物种配额不足`);
+    }
+
+    const entity = createEntity(name, species);
+
+    // 粒子守恒：从天地灌注初始粒子（转移，不创造）
+    const tank = entity.components.tank;
+    if (tank) {
+      ParticleTransfer.transfer(this.qiPool.state.pools, tank.tanks, { ...tank.maxTanks });
+    }
+
     this.setEntity(entity);
 
     const coreCurrent = entity.components.tank?.tanks[entity.components.tank.coreParticle] ?? 0;
@@ -188,7 +215,7 @@ export class World {
 
   performAction(
     entityId: string,
-    action: ActionId,
+    action: ActionId, // actionId or graphId
     targetId?: string,
     payload?: unknown,
   ): ActionResult {
@@ -201,83 +228,190 @@ export class World {
         return this.fail("生灵不存在或已消亡", tickEvents);
       }
 
-      const actionDef = ActionRegistry.get(action);
-      if (!actionDef) {
-        return this.fail(`未知行动: ${action}`, tickEvents);
-      }
-      if (!actionDef.species.includes(entity.species)) {
-        const speciesName = UNIVERSE.reactors[entity.species]?.name ?? entity.species;
-        return this.fail(`${speciesName}无法执行「${actionDef.name}」`, tickEvents);
+      if (entity.components.actionGraph) {
+        return this.fail("正在执行其他功法/动作", tickEvents, entityId);
       }
 
-      const handler = ActionRegistry.getHandler(action);
-      if (!handler) {
-        return this.fail(`行动「${actionDef.name}」未实装(缺少Handler)`, tickEvents);
+      let graphDef = GraphRegistry.get(action);
+      if (!graphDef) {
+        const actDef = ActionRegistry.get(action);
+        if (!actDef) return this.fail(`未知行动/功法: ${action}`, tickEvents, entityId);
+        if (!actDef.species.includes(entity.species)) {
+          const speciesName = UNIVERSE.reactors[entity.species]?.name ?? entity.species;
+          return this.fail(`${speciesName}无法执行「${actDef.name}」`, tickEvents, entityId);
+        }
+
+        // Wrap as implicit single-node graph
+        graphDef = {
+          id: `single_${action}`,
+          name: actDef.name,
+          description: actDef.name,
+          entryNode: "root",
+          nodes: [{ nodeId: "root", actionId: action }],
+          edges: [],
+          species: actDef.species,
+        };
+      } else {
+        if (!graphDef.species.includes(entity.species)) {
+          const speciesName = UNIVERSE.reactors[entity.species]?.name ?? entity.species;
+          return this.fail(`${speciesName}无法修炼功法「${graphDef.name}」`, tickEvents, entityId);
+        }
       }
 
-      const cost = actionDef.qiCost;
-      const tankComp = entity.components.tank;
-
-      // Deduct action cost
-      if (tankComp && cost > 0) {
-        ParticleTransfer.transfer(tankComp.tanks, this.qiPool.state.pools, {
-          [tankComp.coreParticle]: cost,
-        });
-      }
-
-      const ctx: ActionContext = {
-        actionCost: cost,
-        ambientPool: this.qiPool.state,
-        tick: this._tick,
-        events: this.events,
+      entity.components.actionGraph = {
+        graphId: graphDef.id,
+        currentNodeId: graphDef.entryNode,
+        currentRepeatCount: 0,
+        ticksHeld: 0,
+        targetId,
         payload,
       };
 
-      let target: Entity | undefined;
-      if (actionDef.needsTarget) {
-        if (!targetId) return this.fail(`${actionDef.name}需要指定目标`, tickEvents);
-        target = this.getEntity(targetId);
-        if (!target || target.status !== "alive")
-          return this.fail("目标不存在或已消亡", tickEvents);
-        ctx.target = target;
+      // Store ephemeral wrapped graphs in the registry briefly if needed?
+      // Easier: just pass it down if it's dynamic. We'll stick it in GraphRegistry temporarily if missing.
+      if (!GraphRegistry.get(graphDef.id)) {
+        GraphRegistry.register(graphDef);
       }
 
-      const result = handler(entity, action, ctx);
-
-      // If action failed, refund the cost
-      if (!result.success && tankComp && cost > 0) {
-        ParticleTransfer.transfer(this.qiPool.state.pools, tankComp.tanks, {
-          [tankComp.coreParticle]: cost,
-        });
-      }
-
-      // Centralized Death / Lifecycle Check
-      this.checkLifecycle();
-
-      // If handler itself failed, propagate failure
-      if (!result.success) {
-        return {
-          success: false,
-          tick: this._tick,
-          result,
-          events: tickEvents,
-          error: (result.reason as string) ?? "行动执行失败",
-          recentEvents: this.eventGraph.getRecentForEntity(entityId),
-          availableActions: entity.status === "alive" ? this.getAvailableActions(entityId) : [],
-        };
-      }
-
-      return {
-        success: true,
-        tick: this._tick,
-        result,
-        events: tickEvents,
-        recentEvents: this.eventGraph.getRecentForEntity(entityId),
-        availableActions: entity.status === "alive" ? this.getAvailableActions(entityId) : [],
-      };
+      // Pump immediately for synchronous expectations in single tick systems
+      return this.pumpGraph(entity, tickEvents);
     } finally {
       unsub();
     }
+  }
+
+  /** 步进实体的 ActiveGraph — 跨 tick 图谱引擎引擎 */
+  private pumpGraph(entity: Entity, tickEvents: WorldEvent[]): ActionResult {
+    const activeGraph = entity.components.actionGraph;
+    if (!activeGraph) return this.fail("实体未在执行任何行动", tickEvents, entity.id);
+
+    const graphDef = GraphRegistry.get(activeGraph.graphId);
+    if (!graphDef) {
+      entity.components.actionGraph = undefined;
+      return this.fail(`未知图谱: ${activeGraph.graphId}`, tickEvents, entity.id);
+    }
+
+    const node = graphDef.nodes.find((n) => n.nodeId === activeGraph.currentNodeId);
+    if (!node) {
+      entity.components.actionGraph = undefined;
+      return this.fail(`无效图谱节点: ${activeGraph.currentNodeId}`, tickEvents, entity.id);
+    }
+
+    const actionDef = ActionRegistry.get(node.actionId);
+    const handler = ActionRegistry.getHandler(node.actionId);
+    if (!actionDef || !handler) {
+      entity.components.actionGraph = undefined;
+      return this.fail(`行动未实装: ${node.actionId}`, tickEvents, entity.id);
+    }
+
+    const cost = actionDef.qiCost;
+    const tankComp = entity.components.tank;
+    if (tankComp && cost > 0) {
+      ParticleTransfer.transfer(tankComp.tanks, this.qiPool.state.pools, {
+        [tankComp.coreParticle]: cost,
+      });
+    }
+
+    const ctx: ActionContext = {
+      actionCost: cost,
+      ambientPool: this.qiPool.state,
+      tick: this._tick,
+      events: this.events,
+      payload: activeGraph.payload,
+      getRelation: (a, b) => this.relations.get(a, b),
+      adjustRelation: (a, b, delta) => this.relations.adjust(a, b, delta),
+    };
+
+    let target: Entity | undefined;
+    if (actionDef.needsTarget) {
+      if (!activeGraph.targetId) {
+        entity.components.actionGraph = undefined;
+        return this.fail(`${actionDef.name}缺少目标`, tickEvents, entity.id);
+      }
+      target = this.getEntity(activeGraph.targetId);
+      if (!target || target.status !== "alive") {
+        entity.components.actionGraph = undefined;
+        return this.fail("目标已消亡或失联", tickEvents, entity.id);
+      }
+      ctx.target = target;
+    }
+
+    const rawOutcome = handler(entity, node.actionId, ctx);
+    let outcome: ActionOutcome;
+    if ("status" in rawOutcome) {
+      outcome = rawOutcome as unknown as ActionOutcome;
+    } else {
+      outcome = {
+        status: rawOutcome.success ? "success" : "aborted",
+        successEffects: [],
+        failureEffects: [],
+        abortedEffects: [],
+        reason: rawOutcome.reason as string | undefined,
+        newQi: rawOutcome.newQi,
+        absorbed: rawOutcome.absorbed,
+      };
+    }
+
+    const isSuccess = outcome.status === "success";
+    // Refund cost on abort or failure
+    if (!isSuccess && tankComp && cost > 0) {
+      ParticleTransfer.transfer(this.qiPool.state.pools, tankComp.tanks, {
+        [tankComp.coreParticle]: cost,
+      });
+    }
+
+    let effectsToApply: Effect[] = [];
+    if (outcome.status === "success") effectsToApply = outcome.successEffects ?? [];
+    else if (outcome.status === "failure") effectsToApply = outcome.failureEffects ?? [];
+    else if (outcome.status === "aborted") effectsToApply = outcome.abortedEffects ?? [];
+
+    if (effectsToApply.length > 0) {
+      const finalEffects = this.effectPipeline.process(effectsToApply, {
+        tick: this._tick,
+        getEntity: (id) => {
+          const e = this.getEntity(id);
+          return e ? { id: e.id, species: e.species, status: e.status } : undefined;
+        },
+      });
+      for (const effect of finalEffects) this.applyEffect(effect);
+    }
+
+    this.checkLifecycle();
+
+    // Graph Topological Step
+    activeGraph.currentRepeatCount++;
+    const repeatTarget = node.repeat ?? 1;
+
+    // Done repeating this node or aborted (abort breaks repetitions)
+    if (activeGraph.currentRepeatCount >= repeatTarget || outcome.status === "aborted") {
+      const possibleEdges = graphDef.edges.filter((e) => e.from === node.nodeId);
+      const nextEdge = possibleEdges.find(
+        (e) => !e.condition || e.condition === "always" || e.condition === `on_${outcome.status}`,
+      );
+      if (nextEdge) {
+        activeGraph.currentNodeId = nextEdge.to;
+        activeGraph.currentRepeatCount = 0;
+      } else {
+        // End of the graph
+        entity.components.actionGraph = undefined;
+      }
+    } else {
+      // Still repeating this node, do not clear component
+      activeGraph.ticksHeld++;
+    }
+
+    if (!isSuccess) {
+      return this.fail(outcome.reason ?? "行动执行失败", tickEvents, entity.id);
+    }
+
+    return {
+      success: true,
+      tick: this._tick,
+      result: rawOutcome,
+      events: tickEvents,
+      recentEvents: this.eventGraph.getRecentForEntity(entity.id),
+      availableActions: entity.status === "alive" ? this.getAvailableActions(entity.id) : [],
+    };
   }
 
   // ── Tick Engine ──────────────────────────────────────────
@@ -294,18 +428,35 @@ export class World {
     this._tick += 1;
     this.storage.setTick(this._tick);
     const aliveEntities = this.getAliveEntities();
+    const deadEntities = this.storage.getAllEntities().filter((e) => e.status === "entombed");
 
     // 1. 结算所有被动法则系统 (替换旧有的 drainAll 与 runSpawnPool)
     const tickCtx = {
       tick: this._tick,
       entities: aliveEntities,
+      deadEntities,
       ambientPool: this.qiPool.state,
       events: this.events,
       addEntity: (e: Entity) => this.setEntity(e),
+      reincarnateEntity: (entityId: string, newName: string, newSpecies: string) =>
+        this.reincarnate(entityId, newName, newSpecies),
     };
 
     for (const sys of ActionRegistry.getSystems()) {
       sys.onTick?.(tickCtx);
+    }
+
+    // Auto-pump ActiveGraphs for alive entities across ticks
+    for (const e of aliveEntities) {
+      if (e.components.actionGraph) {
+        const discardedEvents: WorldEvent[] = [];
+        const unsub = this.events.onAny((ev) => discardedEvents.push(ev));
+        try {
+          this.pumpGraph(e, discardedEvents);
+        } finally {
+          unsub();
+        }
+      }
     }
 
     // 1.5 被动系统结算后的生命周期检查
@@ -331,6 +482,7 @@ export class World {
 
     // Flush dirty state to persistent storage
     this.storage.setQiPoolState(this.qiPool.state);
+    this.storage.setRelations(this.relations.toJSON());
     this.storage.flush().catch((err) => {
       console.error("[World] 持久化 flush 失败:", err);
     });
@@ -370,6 +522,11 @@ export class World {
             : aliveTargets;
 
         for (const t of targets) {
+          // 关系区间过滤
+          if (def.relationRange) {
+            const rel = this.relations.get(entity.id, t.id);
+            if (rel < def.relationRange[0] || rel > def.relationRange[1]) continue;
+          }
           allOptions.push({
             action: def.id as ActionId,
             targetId: t.id,
@@ -417,6 +574,68 @@ export class World {
       return def.canExecute(entity, this);
     }
     return { ok: true };
+  }
+
+  private applyEffect(effect: Effect) {
+    if (effect.type === "emit_event") {
+      this.events.emit(effect.event);
+    } else if (effect.type === "adjust_relation") {
+      this.relations.adjust(effect.a, effect.b, effect.delta);
+    } else if (effect.type === "transfer") {
+      const getResource = (id: string) => {
+        if (id === "ambient") return this.qiPool.state.pools;
+        const e = this.getEntity(id);
+        return e?.components.tank?.tanks;
+      };
+      const src = getResource(effect.from);
+      const dst = getResource(effect.to);
+      if (src && dst) {
+        ParticleTransfer.transfer(src, dst, effect.amounts);
+      }
+    } else if (effect.type === "set_realm") {
+      const e = this.getEntity(effect.entityId);
+      if (e?.components.cultivation) {
+        e.components.cultivation.realm = effect.realm;
+      }
+      if (e?.components.tank) {
+        e.components.tank.maxTanks = { ...effect.newMaxTanks };
+      }
+    } else if (effect.type === "set_status") {
+      const e = this.getEntity(effect.entityId);
+      if (e) e.status = effect.status;
+    } else if (effect.type === "reactor_beam") {
+      const e = this.getEntity(effect.entityId);
+      const tankComp = e?.components.tank;
+      const cultComp = e?.components.cultivation;
+      const template = e ? UNIVERSE.reactors[e.species] : undefined;
+
+      if (e && tankComp && cultComp && template) {
+        const { alive } = Reactor.processIncomingBeam(
+          tankComp.tanks,
+          this.qiPool.state.pools,
+          effect.beam,
+          UNIVERSE.ecology.ambientDensity,
+          effect.sourceRealm,
+          template.ownPolarity,
+          template.oppositePolarity,
+        );
+        if (!alive) {
+          e.status = "lingering"; // Mark as dead if reactor explodes
+        }
+      }
+    } else if (effect.type === "cascade") {
+      // Execute the cascaded action directly (WARNING: no depth limit yet)
+      this.performAction(effect.entityId, effect.actionId, effect.targetId, effect.payload);
+    } else if (effect.type === "sync_tank") {
+      const e = this.getEntity(effect.entityId);
+      if (e?.components.tank) {
+        // Replace the tank contents entirely to match resolver simulation
+        e.components.tank.tanks = { ...effect.tanks };
+      }
+    } else if (effect.type === "sync_ambient") {
+      // Replace ambient pools entirely to match resolver simulation
+      this.qiPool.state.pools = { ...effect.pools };
+    }
   }
 
   /** 集中式生命周期检查 — 粒子归零则标记为濒死 */
@@ -545,8 +764,8 @@ export class World {
     const oldSpecies = entity.species;
     const pastArticle = entity.life.article;
 
-    // 用 factory 创建一个临时蓝图获取初始组件数据
-    const blueprint = createEntity(newName, newSpecies, this.qiPool.state);
+    // 用 factory 创建一个临时蓝图获取初始组件数据（空壳，不涉及粒子）
+    const blueprint = createEntity(newName, newSpecies);
 
     // 原地重置：保留 id 和 soulId，重置一切其他属性
     entity.name = newName;
@@ -558,6 +777,12 @@ export class World {
       article: pastArticle, // 携带前世记忆
       events: [],
     };
+
+    // 粒子守恒：从天地灌注粒子（转移，不创造）
+    const tank = entity.components.tank;
+    if (tank) {
+      ParticleTransfer.transfer(this.qiPool.state.pools, tank.tanks, { ...tank.maxTanks });
+    }
 
     this.events.emit({
       tick: this._tick,

@@ -38,6 +38,8 @@ function makeContext(ambientQl: number): { ctx: ActionContext; events: WorldEven
       ambientPool: { pools: { ql: ambientQl, qs: 500 }, total: 30000 },
       tick: 1,
       events: bus,
+      getRelation: () => 0,
+      adjustRelation: (_a: string, _b: string, _delta: number) => 0,
     },
     events: collected,
   };
@@ -54,7 +56,7 @@ describe("Breakthrough System", () => {
       const e = makeHuman(180);
       const { ctx } = makeContext(1000);
       const res = doBreakthrough(e, "breakthrough", ctx);
-      if (res.success) successes++;
+      if (res.status === "success") successes++;
     }
 
     const rate = successes / N;
@@ -69,7 +71,7 @@ describe("Breakthrough System", () => {
     const e = makeHuman(160); // 80% of 200
     const { ctx } = makeContext(1000);
     const res = doBreakthrough(e, "breakthrough", ctx);
-    // Should NOT fail with "灵气未臻圆满" — it should attempt
+    // Should NOT fail with "灵气未臻圆满" — it should attempt (either success or failure, not aborted)
     expect(res.reason).not.toBe(
       `灵气未臻圆满(需${Math.round(UNIVERSE.breakthrough.minQiRatio * 100)}%容量)`,
     );
@@ -81,7 +83,7 @@ describe("Breakthrough System", () => {
     const e = makeHuman(150); // 75% of 200 — below 80%
     const { ctx } = makeContext(1000);
     const res = doBreakthrough(e, "breakthrough", ctx);
-    expect(res.success).toBe(false);
+    expect(res.status).toBe("aborted");
     expect(res.reason).toContain("灵气未臻圆满");
   });
 });
@@ -91,26 +93,32 @@ describe("Meditation Feedback", () => {
     applyParams(BALANCE);
 
     const e = makeHuman(100); // plenty of room to absorb
-    const { ctx, events } = makeContext(2); // almost no ambient ql!
-    doAbsorb(e, "meditate", ctx);
+    const { ctx } = makeContext(2); // almost no ambient ql!
+    const res = doAbsorb(e, "meditate", ctx);
 
-    const warnings = events.filter((ev) => ev.type === "system_warning");
+    const effects = res.successEffects ?? [];
+    const warnings = effects.filter(
+      (eff) => eff.type === "emit_event" && "event" in eff && eff.event.type === "system_warning",
+    );
     console.log(`  Warnings emitted: ${warnings.length}`);
     if (warnings.length > 0) {
-      console.log(`  Message: ${warnings[0]!.message}`);
+      console.log(`  Message: ${(warnings[0] as { event: { message: string } }).event.message}`);
     }
     expect(warnings.length).toBeGreaterThanOrEqual(1);
-    expect(warnings[0]!.message).toContain("灵气稀薄");
+    expect((warnings[0] as { event: { message: string } }).event.message).toContain("灵气稀薄");
   });
 
   it("no warning when ambient qi is plentiful", () => {
     applyParams(BALANCE);
 
     const e = makeHuman(100);
-    const { ctx, events } = makeContext(1000); // plenty of ambient ql
-    doAbsorb(e, "meditate", ctx);
+    const { ctx } = makeContext(1000); // plenty of ambient ql
+    const res = doAbsorb(e, "meditate", ctx);
 
-    const warnings = events.filter((ev) => ev.type === "system_warning");
+    const effects = res.successEffects ?? [];
+    const warnings = effects.filter(
+      (eff) => eff.type === "emit_event" && "event" in eff && eff.event.type === "system_warning",
+    );
     expect(warnings.length).toBe(0);
   });
 

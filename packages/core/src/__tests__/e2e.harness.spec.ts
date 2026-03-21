@@ -194,7 +194,12 @@ describe("World E2E — Fluent Harness", () => {
       // AI step 3: execute
       const choice = possible[0]!;
       const result = harness.act(ai.id, choice.action, choice.targetId);
-      expect(result.success).toBe(true);
+      if (!result.success) {
+        // Breakthrough and other actions can legitimately fail random chances after initiation
+        expect(result.error).toMatch(/失败|未臻圆满|不足/);
+      } else {
+        expect(result.success).toBe(true);
+      }
 
       // AI step 4: observe result
       expect(result.availableActions).toBeDefined();

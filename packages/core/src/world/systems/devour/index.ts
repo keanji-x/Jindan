@@ -19,6 +19,7 @@ export const DevourSystem: GameSystem = {
       species: ["human", "beast"],
       needsTarget: true,
       npcTargetFilter: "npc-only",
+      relationRange: [-100, 50],
       canExecute: (entity, ctx) => {
         const hasTargets = ctx.getAliveEntities().some((e) => e.id !== entity.id);
         return hasTargets ? { ok: true } : { ok: false, reason: "没有可吞噬的目标" };
