@@ -10,10 +10,10 @@
 
 import { BeingLedger } from "../../beings/BeingLedger.js";
 import { UNIVERSE } from "../../config/universe.config.js";
-import { spawnNpc } from "../../factory.js";
+import { createEntity } from "../../factory.js";
 import { ParticleTransfer } from "../../reactor/ParticleTransfer.js";
 import type { Entity } from "../../types.js";
-import type { GameSystem, WorldTickContext } from "../GameSystem.js";
+import type { WorldTickContext } from "../GameSystem.js";
 
 /** 从 ambient 转移粒子填满新生灵的 tank（守恒） */
 function fillFromAmbient(entity: Entity, context: WorldTickContext): void {
@@ -23,7 +23,7 @@ function fillFromAmbient(entity: Entity, context: WorldTickContext): void {
   ParticleTransfer.transfer(context.ambientPool.pools, tank.tanks, { ...tank.maxTanks });
 }
 
-function executeSpawn(context: WorldTickContext): void {
+export function executeSpawn(context: WorldTickContext): void {
   const { ambientPool, entities, deadEntities, events, tick, addEntity, reincarnateEntity } =
     context;
   const eco = UNIVERSE.ecology;
@@ -67,7 +67,9 @@ function executeSpawn(context: WorldTickContext): void {
     }
   } else {
     // ── 新生（从天地灌注粒子，守恒转移） ─────────────────
-    const entity = spawnNpc(decision.species);
+    const entity = createEntity("", decision.species, {
+      realm: 1 + Math.floor(Math.random() * 2),
+    });
     fillFromAmbient(entity, context);
     addEntity(entity);
 
@@ -86,12 +88,3 @@ function executeSpawn(context: WorldTickContext): void {
 }
 
 // -- System Export --
-
-export const SpawnSystem: GameSystem = {
-  id: "spawn",
-  name: "化生法则",
-  actions: [], // 纯被动系统
-  onTick: (context) => {
-    executeSpawn(context);
-  },
-};

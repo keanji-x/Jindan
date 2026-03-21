@@ -23,9 +23,9 @@ if (!INVITE_CODE) {
 }
 
 // ── 简易频率限制 ──────────────────────────────────────────
-const RATE_LIMIT_WINDOW_MS = 60_000; // 1 分钟
-const RATE_LIMIT_MAX = 10; // 每分钟最多 10 次创建
-const loginTimestamps: number[] = [];
+const _RATE_LIMIT_WINDOW_MS = 60_000; // 1 分钟
+const _RATE_LIMIT_MAX = 10; // 每分钟最多 10 次创建
+const _loginTimestamps: number[] = [];
 
 // ── Session payload ───────────────────────────────────────
 interface SessionPayload {
@@ -44,6 +44,7 @@ export class BotService {
   private readonly storage: StorageBackend;
   readonly relay: AgentRelay;
   private readonly jwtSecret: string;
+  private readonly attachTickets = new Map<string, { entityId: string; expiresAt: number }>();
 
   constructor(world: World, storage: StorageBackend) {
     const secret = process.env.JWT_SECRET;
@@ -175,35 +176,29 @@ export class BotService {
     return { username, characters };
   }
 
-  /** 以用户身份创建角色 */
-  createCharacterForUser(
+  /** 以用户身份夺舍现有生物 */
+  attachCharacterForUser(
     userToken: string,
-    name: string,
-    species: string,
+    entityId: string,
+    inviteCode?: string,
   ): { entityId: string; secret: string; entity: Record<string, unknown> } {
     const { username } = this.verifyUserToken(userToken);
     const user = this.storage.getUser(username);
     if (!user) throw new Error("用户不存在");
 
-    // 频率限制
-    const now = Date.now();
-    const cutoff = now - RATE_LIMIT_WINDOW_MS;
-    while (loginTimestamps.length > 0 && loginTimestamps[0]! < cutoff) loginTimestamps.shift();
-    if (loginTimestamps.length >= RATE_LIMIT_MAX) throw new Error("创建角色过于频繁");
-    loginTimestamps.push(now);
+    // 生成一次性夺舍 Token，这也会校验 inviteCode
+    const attachToken = this.generateAttachToken(entityId, inviteCode);
 
-    const entity = this.world.createEntity(name, species);
-
-    // 生成私钥
-    const secret = `jd_${randomBytes(12).toString("hex")}`;
-    const hashed = this.hashSecret(secret);
-    this.storage.setSecret(entity.id, hashed);
+    // 执行夺舍
+    const result = this.attachEntity(entityId, attachToken);
 
     // 绑定到用户
-    user.entityIds.push(entity.id);
-    this.storage.setUser(username, user);
+    if (!user.entityIds.includes(result.entityId)) {
+      user.entityIds.push(result.entityId);
+      this.storage.setUser(username, user);
+    }
 
-    return { entityId: entity.id, secret, entity: entity as unknown as Record<string, unknown> };
+    return result;
   }
 
   /** 以用户身份删除角色 */
@@ -230,37 +225,70 @@ export class BotService {
   // 1. 私钥认证 (角色级)
   // ================================================================
 
-  /** 创建新角色 → 生成 EntitySecret（私钥），只返回一次 */
-  createEntity(
-    name: string,
-    species: string,
-    inviteCode?: string,
+  /**
+   * 生成一个有时效性的 Attach Token (默认 5 分钟有效)
+   * 前端/管理员可以调用此方法，将生成的 token 交给外部 LLM
+   */
+  generateAttachToken(entityId: string, inviteCode?: string, expiresInMs = 5 * 60 * 1000): string {
+    if (INVITE_CODE && inviteCode !== INVITE_CODE) {
+      throw new Error("邀请码错误或缺失");
+    }
+    const entity = this.world.getEntity(entityId);
+    if (!entity) throw new Error("找不到该实体");
+    if (entity.status !== "alive") throw new Error("该实体无法连接 (已死亡或封印)");
+
+    // 清理过期 ticket 防止内存泄漏
+    const now = Date.now();
+    for (const [k, v] of this.attachTickets.entries()) {
+      if (v.expiresAt < now) this.attachTickets.delete(k);
+    }
+
+    const attachToken = `att_${randomBytes(12).toString("hex")}`;
+    this.attachTickets.set(attachToken, {
+      entityId,
+      expiresAt: now + expiresInMs,
+    });
+    return attachToken;
+  }
+
+  /**
+   * 收编/夺舍已有确切实体的控制权 (供外部 LLM Agent 凭票接管)
+   */
+  attachEntity(
+    entityId: string,
+    attachToken: string,
   ): {
     entityId: string;
     secret: string;
     entity: Record<string, unknown>;
   } {
-    // 邀请码验证
-    if (INVITE_CODE && inviteCode !== INVITE_CODE) {
-      throw new Error("邀请码错误或缺失");
+    // 校验 Token 窗口机制
+    if (!attachToken) throw new Error("缺少 attachToken");
+    const ticket = this.attachTickets.get(attachToken);
+    if (!ticket) throw new Error("无效的 attachToken");
+    if (ticket.entityId !== entityId) throw new Error("attachToken 与目标实体不匹配");
+    if (ticket.expiresAt < Date.now()) {
+      this.attachTickets.delete(attachToken);
+      throw new Error("attachToken 已过期");
     }
 
-    // 频率限制
-    const now = Date.now();
-    const cutoff = now - RATE_LIMIT_WINDOW_MS;
-    while (loginTimestamps.length > 0 && loginTimestamps[0]! < cutoff) {
-      loginTimestamps.shift();
-    }
-    if (loginTimestamps.length >= RATE_LIMIT_MAX) {
-      throw new Error("创建角色过于频繁，请稍后再试");
-    }
-    loginTimestamps.push(now);
+    // 阅后即焚
+    this.attachTickets.delete(attachToken);
 
-    const entity = this.world.createEntity(name, species);
+    const entity = this.world.getEntity(entityId);
+    if (!entity) throw new Error("找不到该实体");
+    if (entity.status !== "alive") throw new Error("该实体无法连接 (已死亡或封印)");
 
-    // 生成私钥: jd_ + 24 字符随机 hex
+    // 如果该目标实体原本没有 AI 组件挂载，则默认塞入一个标记，表明它现在受外置大脑驱动
+    if (!entity.components.brain) {
+      entity.components.brain = { id: "external_llm" };
+    }
+
+    // 生成接管私钥: jd_ + 24 字符随机 hex
     const secret = `jd_${randomBytes(12).toString("hex")}`;
     const hashed = this.hashSecret(secret);
+
+    // 强制覆盖旧有绑定的私钥，完成夺舍
     this.storage.setSecret(entity.id, hashed);
 
     return { entityId: entity.id, secret, entity: entity as unknown as Record<string, unknown> };

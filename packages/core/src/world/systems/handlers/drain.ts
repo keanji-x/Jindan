@@ -7,11 +7,10 @@
 import type { EventBus } from "../../../EventBus.js";
 import { UNIVERSE } from "../../config/universe.config.js";
 import type { AmbientPool, Entity } from "../../types.js";
-import type { GameSystem } from "../GameSystem.js";
 
 // -- Handler implementation --
 
-function executeDrain(
+export function executeDrain(
   entities: Entity[],
   ambientPool: AmbientPool,
   tick: number,
@@ -132,12 +131,3 @@ function chainCollapse(
 }
 
 // -- System Export --
-
-export const DrainSystem: GameSystem = {
-  id: "drain",
-  name: "灵气耗散法则",
-  actions: [], // 纯被动系统
-  onTick: (context) => {
-    executeDrain(context.entities, context.ambientPool, context.tick, context.events);
-  },
-};

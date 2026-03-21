@@ -41,6 +41,16 @@
   },
   "overrides": [
     {
+      "includes": ["**/__tests__/**", "**/*.spec.ts", "**/*.test.ts"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noExplicitAny": "off"
+          }
+        }
+      }
+    },
+    {
       "includes": ["packages/web/src/**/*.css"],
       "css": {
         "parser": {

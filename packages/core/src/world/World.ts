@@ -26,13 +26,9 @@ import { RelationGraph } from "./RelationGraph.js";
 import { ParticleTransfer } from "./reactor/ParticleTransfer.js";
 import { Reactor } from "./reactor/Reactor.js";
 import { ActionRegistry } from "./systems/ActionRegistry.js";
-import { AbsorbSystem } from "./systems/absorb/index.js";
-import { BreakthroughSystem } from "./systems/breakthrough/index.js";
-import { ChatSystem } from "./systems/chat/index.js";
-import { DevourSystem } from "./systems/devour/index.js";
-import { DrainSystem } from "./systems/drain/index.js";
-import { RestSystem } from "./systems/rest/index.js";
-import { SpawnSystem } from "./systems/spawn/index.js";
+import { InteractionSystem } from "./systems/InteractionSystem.js";
+import { LifecycleSystem } from "./systems/LifecycleSystem.js";
+import { SingleEntitySystem } from "./systems/SingleEntitySystem.js";
 import type { ActionContext, CanExecuteContext } from "./systems/types.js";
 import type {
   ActionId,
@@ -74,9 +70,13 @@ export class World {
 
     this.registerSystems();
 
-    // Restore tick from persisted storage
+    // Restore tick and dynamic reactors from persisted storage
     if (storage) {
       this._tick = storage.getTick();
+      const dynamicReactors = storage.getReactors();
+      for (const [id, template] of Object.entries(dynamicReactors)) {
+        UNIVERSE.reactors[id] = template;
+      }
     }
 
     // Event interceptor: convert WorldEvents into WorldEventRecords
@@ -112,13 +112,9 @@ export class World {
 
   private registerSystems() {
     ActionRegistry._reset();
-    ActionRegistry.registerSystem(AbsorbSystem);
-    ActionRegistry.registerSystem(BreakthroughSystem);
-    ActionRegistry.registerSystem(DevourSystem);
-    ActionRegistry.registerSystem(RestSystem);
-    ActionRegistry.registerSystem(ChatSystem);
-    ActionRegistry.registerSystem(DrainSystem);
-    ActionRegistry.registerSystem(SpawnSystem);
+    ActionRegistry.registerSystem(SingleEntitySystem);
+    ActionRegistry.registerSystem(InteractionSystem);
+    ActionRegistry.registerSystem(LifecycleSystem);
   }
 
   // ── Entity Management (direct storage delegation) ──────
@@ -236,8 +232,9 @@ export class World {
       if (!graphDef) {
         const actDef = ActionRegistry.get(action);
         if (!actDef) return this.fail(`未知行动/功法: ${action}`, tickEvents, entityId);
-        if (!actDef.species.includes(entity.species)) {
-          const speciesName = UNIVERSE.reactors[entity.species]?.name ?? entity.species;
+        const reactorTemplate = UNIVERSE.reactors[entity.species];
+        if (!reactorTemplate?.actions.includes(actDef.id)) {
+          const speciesName = reactorTemplate?.name ?? entity.species;
           return this.fail(`${speciesName}无法执行「${actDef.name}」`, tickEvents, entityId);
         }
 
@@ -249,11 +246,13 @@ export class World {
           entryNode: "root",
           nodes: [{ nodeId: "root", actionId: action }],
           edges: [],
-          species: actDef.species,
         };
       } else {
-        if (!graphDef.species.includes(entity.species)) {
-          const speciesName = UNIVERSE.reactors[entity.species]?.name ?? entity.species;
+        const reactorTemplate = UNIVERSE.reactors[entity.species];
+        const _isAllowed = true; // FIXME: If graphDef has species restrictions? Actually graphs are being deprecated or they don't have species restrictions directly checked against string anymore. Let's just leave it or remove the check.
+        // Actually, let's keep it simple and just true, since Graph implementation might change.
+        if (graphDef.species && !graphDef.species.includes(entity.species as never)) {
+          const speciesName = reactorTemplate?.name ?? entity.species;
           return this.fail(`${speciesName}无法修炼功法「${graphDef.name}」`, tickEvents, entityId);
         }
       }
@@ -483,6 +482,7 @@ export class World {
     // Flush dirty state to persistent storage
     this.storage.setQiPoolState(this.qiPool.state);
     this.storage.setRelations(this.relations.toJSON());
+    this.storage.setReactors(UNIVERSE.reactors);
     this.storage.flush().catch((err) => {
       console.error("[World] 持久化 flush 失败:", err);
     });
@@ -803,6 +803,8 @@ export class World {
   /** 将当前状态刷写到持久化存储 */
   async flush(): Promise<void> {
     this.storage.setQiPoolState(this.qiPool.state);
+    this.storage.setRelations(this.relations.toJSON());
+    this.storage.setReactors(UNIVERSE.reactors);
     await this.storage.flush();
   }
 }

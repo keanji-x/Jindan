@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import { UNIVERSE } from "../world/config/universe.config.js";
 import { ActionRegistry } from "../world/systems/ActionRegistry.js";
 import type { GameSystem } from "../world/systems/GameSystem.js";
 import type { ActionDef } from "../world/systems/types.js";
@@ -13,7 +14,6 @@ describe("ActionRegistry", () => {
     name: "Action 1",
     description: "Desc 1",
     qiCost: 10,
-    species: ["human"],
     needsTarget: true,
   };
 
@@ -22,7 +22,6 @@ describe("ActionRegistry", () => {
     name: "Action 2",
     description: "Desc 2",
     qiCost: 0,
-    species: ["beast", "human"],
     needsTarget: false,
   };
 
@@ -30,7 +29,7 @@ describe("ActionRegistry", () => {
     id: "system1",
     name: "System 1",
     actions: [mockAction1, mockAction2],
-    handler: (entity, actionId, ctx) => ({ success: true, newQi: 0 }),
+    handler: (_entity, _actionId, _ctx) => ({ success: true, newQi: 0 }),
   };
 
   it("should register a system and its actions", () => {
@@ -61,6 +60,14 @@ describe("ActionRegistry", () => {
   it("should successfully filter actions by species", () => {
     ActionRegistry.registerSystem(mockSystem);
 
+    // Mock UNIVERSE.reactors for this test since forSpecies depends on it now.
+    const originalReactors = UNIVERSE.reactors;
+    UNIVERSE.reactors = {
+      human: { actions: ["action1", "action2"] },
+      beast: { actions: ["action2"] },
+      plant: { actions: [] },
+    } as any;
+
     const humanActions = ActionRegistry.forSpecies("human");
     expect(humanActions).toHaveLength(2);
 
@@ -70,6 +77,8 @@ describe("ActionRegistry", () => {
 
     const plantActions = ActionRegistry.forSpecies("plant");
     expect(plantActions).toHaveLength(0);
+
+    UNIVERSE.reactors = originalReactors;
   });
 
   it("should return action details via helper methods", () => {

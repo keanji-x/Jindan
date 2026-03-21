@@ -9,6 +9,6 @@ export const HumanReactor: ReactorTemplate = {
   baseDrainRate: 1,
   ownPolarity: { ql: 1.0, qs: 0.0 },
   oppositePolarity: { ql: 0.0, qs: 1.0 },
-  actions: ["meditate", "devour", "breakthrough", "rest"],
+  actions: ["meditate", "devour", "breakthrough", "rest", "chat"],
   ambientCapContribution: 200,
 };

@@ -7,7 +7,7 @@
 import type { GameSystem } from "../GameSystem.js";
 import type { ActionResolver } from "../types.js";
 
-const doRest: ActionResolver = (entity, actionId, ctx) => {
+export const doRest: ActionResolver = (entity, actionId, ctx) => {
   const { actionCost, tick } = ctx;
   const tankComp = entity.components.tank;
   if (!tankComp) {
@@ -43,7 +43,6 @@ export const RestSystem: GameSystem = {
       name: "休息",
       description: "无所事事 (仍会被动流失灵气)",
       qiCost: 0,
-      species: ["human", "beast", "plant"],
       needsTarget: false,
     },
   ],

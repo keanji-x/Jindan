@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { BeingLedger } from "../world/beings/BeingLedger.js";
 import { UNIVERSE } from "../world/config/universe.config.js";
-import { GraphRegistry } from "../world/effects/GraphRegistry.js";
 import { ActionRegistry } from "../world/systems/ActionRegistry.js";
 import { World } from "../world/World.js";
 
@@ -84,12 +83,14 @@ describe("World", () => {
         name: "Attack",
         description: "",
         qiCost: 0,
-        species: ["human"],
         needsTarget: true,
       });
       const spyHandler = vi
         .spyOn(ActionRegistry, "getHandler")
         .mockReturnValue(() => ({ success: true, newQi: 0 }));
+
+      const originalActions = UNIVERSE.reactors["human"].actions;
+      UNIVERSE.reactors["human"].actions = [...originalActions, "attack"];
 
       const resNoTarget = world.performAction(entity.id, "attack" as any);
       expect(resNoTarget.success).toBe(false);
@@ -104,6 +105,7 @@ describe("World", () => {
         expect(resDeadTarget.error).toMatch(/目标已消亡/);
       }
 
+      UNIVERSE.reactors["human"].actions = originalActions;
       spyRegistry.mockRestore();
       spyHandler.mockRestore();
     });

@@ -2,9 +2,9 @@
 // TribulationGenerator — Dynamically crafts a Tribulation Graph
 // ============================================================
 
-import { GraphValidator } from "../../effects/GraphValidator.js";
-import type { ActionGraphDef } from "../../effects/types.js";
-import type { Entity } from "../../types.js";
+import { GraphValidator } from "../../../effects/GraphValidator.js";
+import type { ActionGraphDef } from "../../../effects/types.js";
+import type { Entity } from "../../../types.js";
 
 export const TribulationGenerator = {
   /**

@@ -9,8 +9,8 @@ import { GraphRegistry } from "../../effects/GraphRegistry.js";
 import type { Effect } from "../../effects/types.js";
 import { Formatters } from "../../formatters.js";
 import { ParticleTransfer } from "../../reactor/ParticleTransfer.js";
-import { TribulationGenerator } from "../tribulation/generator.js";
 import type { ActionResolver } from "../types.js";
+import { TribulationGenerator } from "./tribulation/generator.js";
 
 export const doBreakthrough: ActionResolver = (entity, _actionId, context) => {
   const { ambientPool, tick } = context;

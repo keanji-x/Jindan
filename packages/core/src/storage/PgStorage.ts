@@ -5,7 +5,8 @@
 // flush() 时批量 UPSERT 到 PG。启动时从 PG 加载已有数据到内存。
 // ============================================================
 
-import type { Entity, QiPoolState, WorldEventRecord } from "../world/types.js";
+import type { ReactorTemplate } from "../world/config/types.js";
+import type { Entity, QiPoolState, RelationData, WorldEventRecord } from "../world/types.js";
 import type { StorageBackend, UserRecord } from "./StorageBackend.js";
 
 // Dynamic import to avoid hard dependency when using MemoryStorage
@@ -42,6 +43,7 @@ export class PgStorage implements StorageBackend {
   private tickDirty = false;
   private dirtyUsers: Set<string> = new Set();
   private dirtySecrets: Set<string> = new Set();
+  private reactorsDirty = false;
 
   constructor(connectionString: string) {
     this.connectionString = connectionString;
@@ -89,13 +91,15 @@ export class PgStorage implements StorageBackend {
         qi_total INTEGER NOT NULL DEFAULT 0,
         tick INTEGER NOT NULL DEFAULT 0,
         relations JSONB NOT NULL DEFAULT '{}',
+        reactors JSONB NOT NULL DEFAULT '{}',
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
 
       ALTER TABLE world_state ADD COLUMN IF NOT EXISTS relations JSONB NOT NULL DEFAULT '{}';
+      ALTER TABLE world_state ADD COLUMN IF NOT EXISTS reactors JSONB NOT NULL DEFAULT '{}';
 
-      INSERT INTO world_state (id, qi_pools, qi_total, tick, relations)
-      VALUES (1, '{}', 0, 0, '{}')
+      INSERT INTO world_state (id, qi_pools, qi_total, tick, relations, reactors)
+      VALUES (1, '{}', 0, 0, '{}', '{}')
       ON CONFLICT (id) DO NOTHING;
 
       CREATE TABLE IF NOT EXISTS users (
@@ -271,16 +275,29 @@ export class PgStorage implements StorageBackend {
 
   // ── Relations ──────────────────────────────────────────
 
-  private relations: Record<string, number> = {};
+  private relations: Record<string, RelationData> = {};
   private relationsDirty = false;
 
-  getRelations(): Record<string, number> {
+  getRelations(): Record<string, RelationData> {
     return this.relations;
   }
 
-  setRelations(relations: Record<string, number>): void {
+  setRelations(relations: Record<string, RelationData>): void {
     this.relations = relations;
     this.relationsDirty = true;
+  }
+
+  // ── Dynamic Reactors ───────────────────────────────────
+
+  private reactorsData: Record<string, ReactorTemplate> = {};
+
+  getReactors(): Record<string, ReactorTemplate> {
+    return this.reactorsData;
+  }
+
+  setReactors(reactors: Record<string, ReactorTemplate>): void {
+    this.reactorsData = reactors;
+    this.reactorsDirty = true;
   }
 
   // ── Persistence Flush ──────────────────────────────────
@@ -338,15 +355,16 @@ export class PgStorage implements StorageBackend {
         );
       }
 
-      // 3. Flush world state (qi pool + tick + relations)
-      if (this.qiPoolDirty || this.tickDirty || this.relationsDirty) {
+      // 3. Flush world state (qi pool + tick + relations + reactors)
+      if (this.qiPoolDirty || this.tickDirty || this.relationsDirty || this.reactorsDirty) {
         await client.query(
-          `UPDATE world_state SET qi_pools = $1, qi_total = $2, tick = $3, relations = $4, updated_at = NOW() WHERE id = 1`,
+          `UPDATE world_state SET qi_pools = $1, qi_total = $2, tick = $3, relations = $4, reactors = $5, updated_at = NOW() WHERE id = 1`,
           [
             JSON.stringify(this.qiPool.pools),
             this.qiPool.total,
             this.tick,
             JSON.stringify(this.relations),
+            JSON.stringify(this.reactorsData),
           ],
         );
       }
@@ -386,6 +404,7 @@ export class PgStorage implements StorageBackend {
       this.qiPoolDirty = false;
       this.tickDirty = false;
       this.relationsDirty = false;
+      this.reactorsDirty = false;
       this.dirtyUsers.clear();
       this.dirtySecrets.clear();
     } catch (err) {
@@ -466,6 +485,7 @@ export class PgStorage implements StorageBackend {
       };
       this.tick = row.tick ?? 0;
       this.relations = row.relations ?? {};
+      this.reactorsData = row.reactors ?? {};
     }
 
     // Load users

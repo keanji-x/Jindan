@@ -63,6 +63,22 @@ export function makeRelationKey(a: string, b: string): RelationKey {
   return a < b ? `${a}:${b}` : `${b}:${a}`;
 }
 
+/** 实体关系标签 */
+export enum RelationTag {
+  DaoPartner = "dao_partner",
+  MasterDisciple = "master_disciple",
+  SwornSibling = "sworn_sibling",
+  BloodFeud = "blood_feud",
+  Friend = "friend",
+  Enemy = "enemy",
+}
+
+/** 实体关系数据 */
+export interface RelationData {
+  score: number;
+  tags: RelationTag[];
+}
+
 // ── World State Types ────────────────────────────────────────
 
 /** 灵气池状态 */

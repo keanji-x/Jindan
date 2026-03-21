@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { ActionRegistry } from "../world/systems/ActionRegistry.js";
-import type { GameSystem } from "../world/systems/GameSystem.js";
-import { TribulationGenerator } from "../world/systems/tribulation/generator.js";
+import { TribulationGenerator } from "../world/systems/handlers/tribulation/generator.js";
 
 describe("TribulationGenerator", () => {
   beforeEach(() => {

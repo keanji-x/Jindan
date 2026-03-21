@@ -13,7 +13,6 @@
 import type { ReactorTemplate } from "../config/types.js";
 import { UNIVERSE } from "../config/universe.config.js";
 import type { AmbientPool, Entity } from "../types.js";
-import { ALL_BEINGS } from "./index.js";
 
 /** acquire 返回的化生指令 */
 export interface AcquireResult {
@@ -93,26 +92,33 @@ export const BeingLedger = {
     if (total < 20) return null; // 灵气稀薄，不足以化生
 
     // 收集可自动化生的物种及其权重
-    const candidates: { species: string; reactor: ReactorTemplate; weight: number }[] = [];
+    const candidates: { generatorId: string; derivedReactor: ReactorTemplate; weight: number }[] =
+      [];
 
-    for (const [id, reactor] of Object.entries(ALL_BEINGS)) {
-      if (!reactor.npcNames || reactor.npcNames.length === 0) continue;
+    for (const [id, generator] of Object.entries(UNIVERSE.generators || {})) {
+      if (!generator.canDerive(ambientPool.pools, total)) continue;
+
+      const derivedReactor = generator.derive(ambientPool.pools, total);
+      if (!derivedReactor.npcNames || derivedReactor.npcNames.length === 0) continue;
 
       // maxInstances 配额检查
-      if (reactor.maxInstances !== undefined) {
-        const count = aliveEntities.filter((e) => e.species === id).length;
-        if (count >= reactor.maxInstances) continue;
+      if (derivedReactor.maxInstances !== undefined) {
+        const count = aliveEntities.filter((e) => e.species === derivedReactor.id).length;
+        if (count >= derivedReactor.maxInstances) continue;
       }
 
       // 生态权重 = 该物种核心粒子在环境中的占比
-      const coreAmount = ambientPool.pools[reactor.coreParticle] ?? 0;
-      const weight = coreAmount / Math.max(total, 1);
+      const coreParticle = derivedReactor.coreParticle || "ql";
+      const coreAmount = ambientPool.pools[coreParticle] ?? 0;
+      let weight = coreAmount / Math.max(total, 1);
 
-      // 需要足额灵气支付化生代价
-      const cost = reactor.baseTanks(1)[reactor.coreParticle] ?? 50;
+      if (weight <= 0) weight = 0.01; // Allow a minimum chance if canDerive is true
+
+      // 需要足额初生代价支付化生
+      const cost = derivedReactor.baseTanks(1)[coreParticle] ?? 50;
       if (coreAmount < cost) continue;
 
-      candidates.push({ species: id, reactor, weight });
+      candidates.push({ generatorId: id, derivedReactor, weight });
     }
 
     if (candidates.length === 0) return null;
@@ -129,13 +135,21 @@ export const BeingLedger = {
       }
     }
 
-    // 轮回优先：在安息者中找同物种候选
+    const { derivedReactor } = chosen;
+
+    // 如果这是一个新物种（或变异物种），注册到运行时的 Universe 中
+    if (!UNIVERSE.reactors[derivedReactor.id]) {
+      UNIVERSE.reactors[derivedReactor.id] = derivedReactor;
+      // The World.ts flush() process will automatically persist newly registered reactors to StorageBackend.
+    }
+
+    // 轮回优先：在安息者中找同确切物种的候选
     const reincarnateCandidate = deadEntities.find(
-      (e) => e.species === chosen.species && e.status === "entombed",
+      (e) => e.species === derivedReactor.id && e.status === "entombed",
     );
 
     return {
-      species: chosen.species,
+      species: derivedReactor.id,
       reincarnateFrom: reincarnateCandidate?.id,
     };
   },

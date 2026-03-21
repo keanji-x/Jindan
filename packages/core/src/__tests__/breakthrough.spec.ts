@@ -3,8 +3,8 @@ import { EventBus } from "../EventBus.js";
 import { BALANCE } from "../world/config/balance.config.js";
 import { applyParams } from "../world/config/TunableParams.js";
 import { UNIVERSE } from "../world/config/universe.config.js";
-import { doAbsorb } from "../world/systems/absorb/handler.js";
-import { doBreakthrough } from "../world/systems/breakthrough/handler.js";
+import { doAbsorb } from "../world/systems/handlers/absorb.js";
+import { doBreakthrough } from "../world/systems/handlers/breakthrough.js";
 import type { ActionContext } from "../world/systems/types.js";
 import type { Entity, WorldEvent } from "../world/types.js";
 

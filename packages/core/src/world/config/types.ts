@@ -86,6 +86,23 @@ export interface ReactorTemplate {
   npcBrainId?: string;
 }
 
+// ── Species Generators ───────────────────────────────────────
+
+/**
+ * 派生器：定义了一类生命的基础蓝图与变异法则。
+ * 基于当前环境（如灵气稀薄、煞气浓郁），派生出具体的 ReactorTemplate (物种物性)。
+ */
+export interface SpeciesGenerator {
+  /** 派生器纲目 ID (如 "plant_gen") */
+  id: string;
+  /** 基础分类名称 (如 "草木类") */
+  baseName: string;
+  /** 判断该派生器是否满足激活条件 */
+  canDerive: (ambient: Record<ParticleId, number>, totalParticles: number) => boolean;
+  /** 根据环境动态派生出全新的 (或已存在的) 具体的物种 ReactorTemplate */
+  derive: (ambient: Record<ParticleId, number>, totalParticles: number) => ReactorTemplate;
+}
+
 // ── Universe Config ──────────────────────────────────────────
 
 /** Complete universe configuration — all physics in one object */
@@ -94,8 +111,10 @@ export interface UniverseConfig {
   particles: ParticleDef[];
   /** All chemical equations */
   equations: Record<string, EquationDef>;
-  /** All reactor (life-form) templates */
+  /** All reactor (life-form) templates (static + dynamic) */
   reactors: Record<string, ReactorTemplate>;
+  /** All species generators (the blueprints that derive reactors) */
+  generators: Record<string, SpeciesGenerator>;
   /** Total particle count in the world (initial ambient qi pool) */
   totalParticles: number;
   /** Real-time interval between ticks in milliseconds */

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EventBus } from "../EventBus.js";
 import { UNIVERSE } from "../world/config/universe.config.js";
-import { DrainSystem } from "../world/systems/drain/index.js";
+import { executeDrain } from "../world/systems/handlers/drain.js";
 
 describe("DrainSystem", () => {
   let events: EventBus;
@@ -28,15 +28,7 @@ describe("DrainSystem", () => {
   });
 
   const runDrain = (entities: any[], ambientPool: any) => {
-    DrainSystem.onTick!({
-      tick: 1,
-      entities,
-      ambientPool,
-      events,
-      addEntity: vi.fn(),
-      reincarnateEntity: vi.fn(),
-      deadEntities: [],
-    });
+    executeDrain(entities, ambientPool, 1, events);
   };
 
   it("should skip non-alive entities", () => {

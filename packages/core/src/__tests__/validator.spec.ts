@@ -15,7 +15,6 @@ describe("GraphValidator", () => {
       name: "Act1",
       description: "test",
       needsTarget: false,
-      species: [],
       qiCost: 0,
       constraints: { cannotFollow: ["forbidden_act"] },
     };
@@ -24,7 +23,6 @@ describe("GraphValidator", () => {
       name: "Act2",
       description: "test",
       needsTarget: false,
-      species: [],
       qiCost: 0,
     };
 
@@ -42,7 +40,6 @@ describe("GraphValidator", () => {
       name: "G1",
       description: "Safe Graph",
       entryNode: "n1",
-      species: [],
       nodes: [
         { nodeId: "n1", actionId: "act1" },
         { nodeId: "n2", actionId: "act2" },
@@ -61,7 +58,6 @@ describe("GraphValidator", () => {
       name: "Act1",
       description: "test",
       needsTarget: false,
-      species: [],
       qiCost: 0,
     };
     const act2: ActionDef = {
@@ -69,7 +65,6 @@ describe("GraphValidator", () => {
       name: "Act2",
       description: "test",
       needsTarget: false,
-      species: [],
       qiCost: 0,
       constraints: { cannotFollow: ["act1"] },
     };
@@ -86,7 +81,6 @@ describe("GraphValidator", () => {
       name: "G2",
       description: "Unsafe Forward",
       entryNode: "n1",
-      species: [],
       nodes: [
         { nodeId: "n1", actionId: "act1" },
         { nodeId: "n2", actionId: "act2" },
@@ -107,7 +101,6 @@ describe("GraphValidator", () => {
       name: "Act1",
       description: "test",
       needsTarget: false,
-      species: [],
       qiCost: 0,
       constraints: { cannotPrecede: ["act2"] },
     };
@@ -116,7 +109,6 @@ describe("GraphValidator", () => {
       name: "Act2",
       description: "test",
       needsTarget: false,
-      species: [],
       qiCost: 0,
     };
 
@@ -132,7 +124,6 @@ describe("GraphValidator", () => {
       name: "G3",
       description: "Unsafe Backward",
       entryNode: "n1",
-      species: [],
       nodes: [
         { nodeId: "n1", actionId: "act1" },
         { nodeId: "n2", actionId: "act2" },
