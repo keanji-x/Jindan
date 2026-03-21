@@ -13,7 +13,6 @@ import type { SearchParams } from "./TunableParams.js";
 /** SA-optimized balance config (score 0.902) */
 export const BALANCE: SearchParams = {
   drainRatio: 0.019,
-  absorbRatio: 0.271,
   breakthroughCostRatio: 0.386,
   breakthroughSuccessRate: 0.201,
   spawnBaseChance: 0.02058473852080356,

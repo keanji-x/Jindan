@@ -72,7 +72,6 @@ export const doDevour: ActionResolver = (entity, _actionId, context) => {
     targetCult.realm,
     attackerCult.realm,
     reactorTemplate.ownPolarity,
-    reactorTemplate.oppositePolarity,
   );
 
   // Sync state back to the world declaratively

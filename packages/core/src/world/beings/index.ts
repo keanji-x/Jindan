@@ -7,6 +7,7 @@
 import type { ReactorTemplate } from "../config/types.js";
 import { ArtifactReactor } from "./artifact.js";
 import { BeastReactor } from "./beast.js";
+import { DaoReactor } from "./dao.js";
 import { HumanReactor } from "./human.js";
 import { PlantReactor } from "./plant.js";
 import { SectReactor } from "./sect.js";
@@ -18,4 +19,5 @@ export const ALL_BEINGS: Record<string, ReactorTemplate> = {
   [PlantReactor.id]: PlantReactor,
   [ArtifactReactor.id]: ArtifactReactor,
   [SectReactor.id]: SectReactor,
+  [DaoReactor.id]: DaoReactor,
 };

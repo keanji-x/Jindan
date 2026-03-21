@@ -9,6 +9,10 @@ import type { EventBus } from "../../EventBus.js";
 import type { AmbientPool, Entity } from "../types.js";
 import type { ActionDef, ActionHandler, ActionResolver } from "./types.js";
 
+// Forward reference to World to avoid circular imports
+// Systems that need World access should use `context.world`
+type WorldRef = import("../World.js").World;
+
 /** 每次 Tick 发送给系统的全局上下文 */
 export interface WorldTickContext {
   tick: number;
@@ -16,6 +20,7 @@ export interface WorldTickContext {
   deadEntities: Entity[]; // 所有已安息实体（轮回候选）
   ambientPool: AmbientPool; // 天地灵气池
   events: EventBus; // 全局事件总线
+  world: WorldRef; // 世界实例引用（用于关系图访问、performAction 等）
 
   /** 允许被动机制（如化生法则）往世界注入新实体 */
   addEntity: (entity: Entity) => void;

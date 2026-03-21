@@ -8,7 +8,7 @@
 // ============================================================
 
 import type { ParticleId } from "../config/types.js";
-import type { LifeStatus, WorldEvent } from "../types.js";
+import type { LifeStatus, RelationTag, WorldEvent } from "../types.js";
 
 // ── Effect Types ─────────────────────────────────────────────
 
@@ -48,12 +48,12 @@ export interface SetStatusEffect {
   readonly status: LifeStatus;
 }
 
-/** Set an entity's realm and update tank capacities */
+/** Set an entity's realm and update proportion limit */
 export interface SetRealmEffect {
   readonly type: "set_realm";
   readonly entityId: string;
   readonly realm: number;
-  readonly newMaxTanks: Record<ParticleId, number>;
+  readonly newProportionLimit: number;
 }
 
 /** Emit a world event */
@@ -84,6 +84,31 @@ export interface SyncAmbientEffect {
   readonly pools: Record<ParticleId, number>;
 }
 
+/** Add a relationship tag between two entities */
+export interface AddRelationTagEffect {
+  readonly type: "add_relation_tag";
+  readonly a: string;
+  readonly b: string;
+  readonly tag: RelationTag;
+}
+
+/** Remove a relationship tag between two entities */
+export interface RemoveRelationTagEffect {
+  readonly type: "remove_relation_tag";
+  readonly a: string;
+  readonly b: string;
+  readonly tag: RelationTag;
+}
+
+/** Create a new entity (used by reproduction actions) */
+export interface CreateEntityEffect {
+  readonly type: "create_entity";
+  readonly name: string;
+  readonly species: string;
+  /** Parent entity IDs — will be linked via Parent/Child RelationTags */
+  readonly parentIds?: string[];
+}
+
 /** Union of all effect types */
 export type Effect =
   | TransferEffect
@@ -94,7 +119,10 @@ export type Effect =
   | EmitEventEffect
   | CascadeEffect
   | SyncTankEffect
-  | SyncAmbientEffect;
+  | SyncAmbientEffect
+  | AddRelationTagEffect
+  | RemoveRelationTagEffect
+  | CreateEntityEffect;
 
 // ── ActionOutcome ────────────────────────────────────────────
 

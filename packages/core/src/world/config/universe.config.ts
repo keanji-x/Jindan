@@ -9,9 +9,6 @@ export const UNIVERSE: UniverseConfig = {
     { id: "qs", name: "煞", color: "#ef5350" },
   ],
 
-  // ── Equations (化学方程式 - 已被物理极性引擎取代) ───────────────────
-  equations: {},
-
   // ── Reactor Templates (基本模板与动态载入) ─────
   reactors: ALL_BEINGS,
 
@@ -26,7 +23,7 @@ export const UNIVERSE: UniverseConfig = {
   // ── Breakthrough ───────────────────────────────────────────
   breakthrough: {
     qiCostPerRealm: 10,
-    /** Required qi ratio to attempt breakthrough */
+    /** Required qi ratio to attempt breakthrough (now proportion-based) */
     minQiRatio: 0.9,
     baseSuccessRate: 0.25,
     maxSuccessRate: 0.85,
@@ -42,16 +39,8 @@ export const UNIVERSE: UniverseConfig = {
   /** QL dissipation k: higher = more QL leaks when ambient is sparse */
   dissipationK: 2,
 
-  // ── Absorb (particles pulled from ambient per action) ──────
-  absorb: {
-    meditate: { base: 20, perRealm: 5 },
-    moonlight: { base: 20, perRealm: 5 },
-    photosynth: { base: 8, perRealm: 2 },
-  },
-
   // ── Passive Drain Formula ──────────────────────────────────
   drainFormula: (baseDrain, _totalParticles, _ambientCore) => {
-    // Simplified: flat drain for more predictable survival curves
     return baseDrain;
   },
 
@@ -61,5 +50,13 @@ export const UNIVERSE: UniverseConfig = {
     ambientDensity: 1,
     spawnBaseChance: 0.3,
     maxEntities: 30,
+  },
+
+  // ── 天道裁决参数 ────────────────────────────────────────
+  daoJudgment: {
+    /** 每 tick 天道从超标实体回收的粒子比率 */
+    drainRate: 0.3,
+    /** 天道占比过高时向众生释放的比率 */
+    releaseRate: 0.2,
   },
 };

@@ -90,7 +90,10 @@ describe("World", () => {
         .mockReturnValue(() => ({ success: true, newQi: 0 }));
 
       const originalActions = UNIVERSE.reactors["human"].actions;
-      UNIVERSE.reactors["human"].actions = [...originalActions, "attack"];
+      UNIVERSE.reactors["human"].actions = [
+        ...originalActions,
+        { id: "attack", name: "Attack", description: "", qiCost: 0, needsTarget: true },
+      ];
 
       const resNoTarget = world.performAction(entity.id, "attack" as any);
       expect(resNoTarget.success).toBe(false);

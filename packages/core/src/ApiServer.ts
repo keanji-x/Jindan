@@ -128,8 +128,13 @@ export class ApiServer {
               const tank = npc.components.tank;
               const core = tank?.coreParticle ?? "ql";
               const qiCurrent = tank ? (tank.tanks[core] ?? 0) : 0;
-              const qiMax = tank ? (tank.maxTanks[core] ?? 1) : 1;
-              const qiRatio = qiCurrent / qiMax;
+              const reactor = UNIVERSE.reactors[npc.species];
+              const realm = npc.components.cultivation?.realm ?? 1;
+              const speciesLimit = reactor?.proportionLimit(realm) ?? 0.05;
+              const proportion =
+                UNIVERSE.totalParticles > 0 ? qiCurrent / UNIVERSE.totalParticles : 0;
+              const qiRatio = speciesLimit > 0 ? proportion / speciesLimit : 0;
+              const qiMax = Math.floor(speciesLimit * UNIVERSE.totalParticles);
               const recentEvents = this.world.eventGraph.getRecentForEntity(npc.id);
 
               const decision = brain.decide(actions, { qiCurrent, qiMax, qiRatio, recentEvents });
@@ -373,14 +378,17 @@ export class ApiServer {
         .map((e, i) => {
           const tank = e.components.tank;
           const core = tank?.coreParticle ?? "ql";
+          const reactor = UNIVERSE.reactors[e.species];
+          const realm = e.components.cultivation?.realm ?? 1;
+          const limit = reactor?.proportionLimit(realm) ?? 0.05;
           return {
             rank: i + 1,
             id: e.id,
             name: e.name,
             species: e.species,
-            realm: e.components.cultivation?.realm ?? 0,
+            realm: realm,
             qi: tank?.tanks[core] ?? 0,
-            maxQi: tank?.maxTanks[core] ?? 0,
+            maxQi: Math.floor(limit * UNIVERSE.totalParticles),
           };
         });
     }

@@ -15,12 +15,16 @@ import { ParticleTransfer } from "../../reactor/ParticleTransfer.js";
 import type { Entity } from "../../types.js";
 import type { WorldTickContext } from "../GameSystem.js";
 
-/** 从 ambient 转移粒子填满新生灵的 tank（守恒） */
+/** 从 ambient 转移 birthCost 粒子填新生灵（守恒） */
 function fillFromAmbient(entity: Entity, context: WorldTickContext): void {
   const tank = entity.components.tank;
   if (!tank) return;
-  // 将 maxTanks 作为转移请求量 — 实际转移量受 ambient 余额限制
-  ParticleTransfer.transfer(context.ambientPool.pools, tank.tanks, { ...tank.maxTanks });
+  const reactor = UNIVERSE.reactors[entity.species];
+  if (!reactor) return;
+  // 使用 birthCost 作为转移请求量 — 实际转移量受 ambient 余额限制
+  ParticleTransfer.transfer(context.ambientPool.pools, tank.tanks, {
+    [tank.coreParticle]: reactor.birthCost,
+  });
 }
 
 export function executeSpawn(context: WorldTickContext): void {

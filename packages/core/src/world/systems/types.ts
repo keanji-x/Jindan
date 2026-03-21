@@ -61,6 +61,9 @@ export interface ActionDef {
   npcTargetFilter?: "npc-only";
   /** 对目标的关系值合法区间 [min, max]，目标关系不在范围内则不可选 */
   relationRange?: [number, number];
+  /** 吸收倍率参数（仅 absorb 类 action 使用） */
+  absorbRate?: { base: number; perRealm: number };
+
   /**
    * [可选] 前置条件校验 — 由各 System 自行判定该 Action 是否可执行。
    * World.canAct 会在通用检查（灵气足够等）之后调用此钩子。

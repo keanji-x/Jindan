@@ -6,6 +6,8 @@
 // game rules — it only interprets these definitions.
 // ============================================================
 
+import type { ActionDef } from "../systems/types.js";
+
 /** Unique identifier for a particle type (e.g. "ql", "qs") */
 export type ParticleId = string;
 
@@ -20,55 +22,41 @@ export interface ParticleDef {
   color: string;
 }
 
-// ── Equation Definitions ─────────────────────────────────────
-
-/**
- * A chemical equation: maps input particles to output particles.
- *
- * Conservation law: Σ values(input) ≡ Σ values(output)
- *
- * Example — detox:
- *   { input: { ql: 1, qs: 1 }, output: { qs: 2 } }
- *   reads as: 1 QL + 1 QS → 2 QS
- */
-export interface EquationDef {
-  /** Unique name (e.g. "detox", "digest_cross") */
-  id: string;
-  /** Display name */
-  name: string;
-  /** Reactants: particle amounts consumed */
-  input: Record<ParticleId, number>;
-  /** Products: particle amounts produced */
-  output: Record<ParticleId, number>;
-}
-
 // ── Reactor Templates ────────────────────────────────────────
 
+/** Absorb source: who this entity pulls particles from */
+export type AbsorbSource = "dao" | "members" | "all";
+
 /**
- * A life-form is a reactor: a set of particle tanks + bound equations.
+ * A life-form is a reactor: a set of particle tanks + polarity rules.
  *
  * The reactor template defines:
  *  - Which particle is the "core" (QL for cultivators, QS for beasts)
- *  - Initial tank capacities per realm
- *  - Which equations fire for each life event
+ *  - Proportion limit per realm (天道容忍占比)
+ *  - Bidirectional flow counterparty (absorbSource)
  */
 export interface ReactorTemplate {
-  /** Species key (e.g. "human", "beast", "plant") */
+  /** Species key (e.g. "human", "beast", "plant", "dao") */
   id: string;
   /** Display name (e.g. "修士") */
   name: string;
   /** The particle that constitutes this being's physical body */
   coreParticle: ParticleId;
-  /** Base tank capacity per realm for each particle */
-  baseTanks: (realm: number) => Record<ParticleId, number>;
-  /** Passive drain rate (particles leaked to ambient per tick) */
+  /**
+   * 天道容忍占比 — 该物种在给定 realm 可占据世界总粒子的比例。
+   * S = entity_qi / world_total > proportionLimit → 触发失衡释放
+   */
+  proportionLimit: (realm: number) => number;
+  /** 初生粒子灌注量（从对手方转移的固定数量） */
+  birthCost: number;
+  /** 双向流对手方："dao" = 天道, "members" = 宗门弟子, "all" = 所有非Dao实体 */
+  absorbSource: AbsorbSource;
+  /** Passive drain rate (particles leaked per tick via metabolism) */
   baseDrainRate: number;
-  /** 自身拥有的极性配释（主燃料） */
+  /** 自身拥有的极性配释（粒子理想比例，总和应为 1.0） */
   ownPolarity: Record<ParticleId, number>;
-  /** 废气/排异的对冲极性配释 */
-  oppositePolarity: Record<ParticleId, number>;
-  /** Available action IDs for this species */
-  actions: string[];
+  /** Available actions for this species (ActionDef instances, may carry absorbRate etc.) */
+  actions: ActionDef[];
   /** Amount this species increases the global ambient capacity */
   ambientCapContribution: number;
   /**
@@ -109,8 +97,6 @@ export interface SpeciesGenerator {
 export interface UniverseConfig {
   /** All particle types in this universe */
   particles: ParticleDef[];
-  /** All chemical equations */
-  equations: Record<string, EquationDef>;
   /** All reactor (life-form) templates (static + dynamic) */
   reactors: Record<string, ReactorTemplate>;
   /** All species generators (the blueprints that derive reactors) */
@@ -138,8 +124,6 @@ export interface UniverseConfig {
   infiltrationK: number;
   /** QL dissipation exp factor: dissipation = baseDrain × (exp(k × (1 - density)) - 1) */
   dissipationK: number;
-  /** Absorb parameters per action */
-  absorb: Record<string, { base: number; perRealm: number }>;
   /** Passive drain formula */
   drainFormula: (baseDrain: number, totalParticles: number, ambientCore: number) => number;
   /** Ecology auto-regulation parameters */
@@ -152,5 +136,12 @@ export interface UniverseConfig {
     spawnBaseChance: number;
     /** SpawnPool: max entities in world (controls emptiness factor) */
     maxEntities: number;
+  };
+  /** 天道裁决参数 */
+  daoJudgment: {
+    /** 每 tick 天道回收超标粒子的比率 (0-1)。越高回收越猛。 */
+    drainRate: number;
+    /** 天道实体占比过高时向众生释放的比率 (0-1) */
+    releaseRate: number;
   };
 }

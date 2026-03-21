@@ -61,7 +61,7 @@ export const ActionRegistry = {
   forSpecies(species: string): ActionDef[] {
     const reactor = UNIVERSE.reactors[species];
     if (!reactor) return [];
-    return allActions.filter((a) => reactor.actions.includes(a.id));
+    return reactor.actions;
   },
 
   /** Get qi cost of an action (0 if unknown) */

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { UNIVERSE } from "../world/config/universe.config.js";
 import { World } from "../world/World.js";
 
 describe("诊断：游戏系统核心机制", () => {
@@ -14,21 +15,17 @@ describe("诊断：游戏系统核心机制", () => {
 
     const tank = player.components.tank!;
     const core = tank.coreParticle;
-    const maxQi = tank.maxTanks[core]!;
 
-    // 工厂初始化为 20% 灵气，手动填满以测试满罐打坐
-    const ambient = world.qiPool.state;
-    const deficit = maxQi - (tank.tanks[core] ?? 0);
-    tank.tanks[core] = maxQi;
-    ambient.pools[core] = (ambient.pools[core] ?? 0) - deficit;
+    // 手动给大量灵气以测试吸收/释放平衡
+    const qi = 100;
+    tank.tanks[core] = qi;
 
-    expect(tank.tanks[core]).toBe(maxQi);
-
-    // 满罐打坐：扣费 → 吸收 → 净零（正确行为）
+    // 打坐：应该吸收灵气
     world.performAction(player.id, "meditate");
     vi.runAllTimers();
 
-    expect(tank.tanks[core]).toBe(maxQi);
+    // 打坐后灵气应该增加或保持（不再受maxTanks限制）
+    expect(tank.tanks[core]!).toBeGreaterThanOrEqual(qi);
     vi.useRealTimers();
   });
 
@@ -41,17 +38,9 @@ describe("诊断：游戏系统核心机制", () => {
 
     const tank = player.components.tank!;
     const core = tank.coreParticle;
-    const maxQi = tank.maxTanks[core]!;
-
-    // 手动降低灵气到 ~50% 当前值
-    const ambient = world.qiPool.state;
-    const currentQi = tank.tanks[core] ?? 0;
-    const drain = Math.floor(currentQi * 0.5);
-    tank.tanks[core] = currentQi - drain;
-    ambient.pools[core] = (ambient.pools[core] ?? 0) + drain;
 
     const qiBefore = tank.tanks[core]!;
-    console.log(`\n吞噬前灵气: ${qiBefore}/${maxQi}`);
+    console.log(`\n吞噬前灵气: ${qiBefore}`);
 
     const targetTank = target.components.tank!;
     console.log(
@@ -103,26 +92,29 @@ describe("诊断：游戏系统核心机制", () => {
     vi.useRealTimers();
   });
 
-  it("完整 game loop：满灵气 → 突破 → 吞噬回血 → 再突破", () => {
+  it("完整 game loop：吸收灵气 → 突破 → 吞噬回血 → 再突破", () => {
     const world = createWorld();
     const player = world.createEntity("AI修士", "human");
 
     const tank = player.components.tank!;
     const core = tank.coreParticle;
+    const reactor = UNIVERSE.reactors[player.species]!;
 
     console.log(`\n=== Game Loop 模拟 ===`);
-    console.log(`初始: 灵气=${tank.tanks[core]}/${tank.maxTanks[core]}`);
+    console.log(`初始: 灵气=${tank.tanks[core]}`);
 
     let breakthroughAttempts = 0;
     let breakthroughSuccesses = 0;
 
     for (let round = 0; round < 50 && player.status === "alive"; round++) {
       const qi = tank.tanks[core]!;
-      const max = tank.maxTanks[core]!;
-      const ratio = qi / max;
+      const realm = player.components.cultivation?.realm ?? 1;
+      const limit = reactor.proportionLimit(realm);
+      const proportion = UNIVERSE.totalParticles > 0 ? qi / UNIVERSE.totalParticles : 0;
+      const occupancy = limit > 0 ? proportion / limit : 0; // how close to limit
       let action = "";
 
-      if (ratio >= 0.9) {
+      if (occupancy >= 0.9) {
         // 尝试突破
         const res = world.performAction(player.id, "breakthrough");
         vi.runAllTimers();
@@ -130,7 +122,7 @@ describe("诊断：游戏系统核心机制", () => {
         const btResult = res.result as { success?: boolean } | undefined;
         if (btResult?.success) breakthroughSuccesses++;
         action = `突破 ${btResult?.success ? "✅" : "❌"}`;
-      } else if (ratio < 0.8) {
+      } else if (occupancy < 0.8) {
         // 灵气不足，找灵植吞噬
         const plants = world.getAliveEntities("plant");
         if (plants.length > 0) {
@@ -151,13 +143,13 @@ describe("诊断：游戏系统核心机制", () => {
       }
 
       console.log(
-        `[${round + 1}] ${action} | 灵气=${tank.tanks[core]}/${tank.maxTanks[core]} (${Math.floor((tank.tanks[core]! / (tank.maxTanks[core] ?? 1)) * 100)}%) | 境界=${player.components.cultivation?.realm} | tick=${world.tick}`,
+        `[${round + 1}] ${action} | 灵气=${tank.tanks[core]} (占比${(proportion * 100).toFixed(1)}%/${(limit * 100).toFixed(1)}%) | 境界=${player.components.cultivation?.realm} | tick=${world.tick}`,
       );
     }
 
     console.log(`\n突破尝试: ${breakthroughAttempts}次, 成功: ${breakthroughSuccesses}次`);
     console.log(
-      `最终: 灵气=${tank.tanks[core]}/${tank.maxTanks[core]}, 境界=${player.components.cultivation?.realm}, status=${player.status}`,
+      `最终: 灵气=${tank.tanks[core]}, 境界=${player.components.cultivation?.realm}, status=${player.status}`,
     );
 
     // 至少应该尝试过突破
