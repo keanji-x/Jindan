@@ -2,13 +2,12 @@ import { describe, expect, it } from "vitest";
 import { EventBus } from "../EventBus.js";
 import { BALANCE } from "../world/config/balance.config.js";
 import { applyParams } from "../world/config/TunableParams.js";
-import { UNIVERSE } from "../world/config/universe.config.js";
 import { doAbsorb } from "../world/systems/handlers/absorb.js";
 import { doBreakthrough } from "../world/systems/handlers/breakthrough.js";
 import type { ActionContext } from "../world/systems/types.js";
 import type { Entity, WorldEvent } from "../world/types.js";
 
-function makeHuman(qi: number, maxQi = 200, realm = 1): Entity {
+function makeHuman(qi: number, _maxQi = 200, realm = 1): Entity {
   return {
     id: "test_human",
     soulId: "test_soul",
@@ -20,7 +19,6 @@ function makeHuman(qi: number, maxQi = 200, realm = 1): Entity {
     components: {
       tank: {
         tanks: { ql: qi, qs: 0 },
-        maxTanks: { ql: maxQi, qs: 0 },
         coreParticle: "ql" as const,
       },
       cultivation: { realm },
@@ -53,7 +51,9 @@ describe("Breakthrough System", () => {
     const N = 1000;
 
     for (let i = 0; i < N; i++) {
-      const e = makeHuman(180);
+      // At realm=1, proportionLimit=0.05. With total=30000, 5% = 1500
+      // Need qi >= 1500 * 0.9 = 1350 to attempt breakthrough
+      const e = makeHuman(1400);
       const { ctx } = makeContext(1000);
       const res = doBreakthrough(e, "breakthrough", ctx);
       if (res.status === "success") successes++;
@@ -68,23 +68,21 @@ describe("Breakthrough System", () => {
   it("80% qi threshold allows breakthrough attempt", () => {
     applyParams(BALANCE);
 
-    const e = makeHuman(160); // 80% of 200
+    const e = makeHuman(1350); // Just at threshold: 1350/30000 = 4.5% ~= 0.05 * 0.9
     const { ctx } = makeContext(1000);
     const res = doBreakthrough(e, "breakthrough", ctx);
-    // Should NOT fail with "灵气未臻圆满" — it should attempt (either success or failure, not aborted)
-    expect(res.reason).not.toBe(
-      `灵气未臻圆满(需${Math.round(UNIVERSE.breakthrough.minQiRatio * 100)}%容量)`,
-    );
+    // Should NOT fail with "灵气占比不足" — it should attempt (either success or failure, not aborted)
+    expect(res.status).not.toBe("aborted");
   });
 
   it("below threshold rejects breakthrough", () => {
     applyParams(BALANCE);
 
-    const e = makeHuman(150); // 75% of 200 — below 80%
+    const e = makeHuman(1); // Very low qi — below any proportion threshold
     const { ctx } = makeContext(1000);
     const res = doBreakthrough(e, "breakthrough", ctx);
     expect(res.status).toBe("aborted");
-    expect(res.reason).toContain("灵气未臻圆满");
+    expect(res.reason).toContain("灵气占比不足");
   });
 });
 

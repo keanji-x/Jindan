@@ -11,14 +11,17 @@ describe("DrainSystem", () => {
     vi.spyOn(events, "emit");
     // Mock the reactor logic and equations
     UNIVERSE.reactors["human"] = {
+      id: "human",
       baseDrainRate: 10,
       name: "Human",
-      ownPolarity: "ql",
-      oppositePolarity: "qs",
-      efficiency: 1,
+      coreParticle: "ql",
+      ownPolarity: { ql: 1.0, qs: 0.0 },
+      proportionLimit: (_realm: number) => 0.05,
+      birthCost: 50,
+      absorbSource: "dao" as const,
+      actions: ["meditate"],
       ambientCapContribution: 50,
     } as any;
-    UNIVERSE.equations.detox = { process: vi.fn(), name: "mock" } as any;
     UNIVERSE.drainBase = 1.0;
     UNIVERSE.ecology.baseAmbientCap = 100;
   });

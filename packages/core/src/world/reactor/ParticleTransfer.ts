@@ -90,4 +90,31 @@ export const ParticleTransfer = {
     }
     return bucket;
   },
+
+  /**
+   * 极性互补 (Polarity Inversion)
+   * 计算给定极性的互补极性。
+   *
+   * 例如: { ql: 0.7, qs: 0.3 } → { ql: 0.3, qs: 0.7 }
+   *       { ql: 1.0, qs: 0.0 } → { ql: 0.0, qs: 1.0 }
+   *       { ql: 0.5, qs: 0.5 } → { ql: 0.5, qs: 0.5 }
+   */
+  invertPolarity(polarity: Polarity): Polarity {
+    const entries = Object.entries(polarity);
+    const sum = entries.reduce((s, [, v]) => s + v, 0);
+    if (sum <= 0) return { ...polarity };
+
+    const inverted: Polarity = {};
+    for (const [pid, ratio] of entries) {
+      inverted[pid] = sum - ratio;
+    }
+    // 归一化使总和 = 1.0
+    const invertedSum = Object.values(inverted).reduce((s, v) => s + v, 0);
+    if (invertedSum > 0) {
+      for (const pid of Object.keys(inverted)) {
+        inverted[pid] = inverted[pid]! / invertedSum;
+      }
+    }
+    return inverted;
+  },
 };

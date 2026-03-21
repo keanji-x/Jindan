@@ -4,81 +4,113 @@ import type { ParticleBucket, Polarity } from "./types.js";
 /**
  * 反应炉核心引擎 (Reactor Engine)
  * 生物反应炉是一个全自动化状态机结构。外部只能向内打入粒子（Action Beam）。
- * 系统会在每个 Tick 依据设定的定律（自我燃烧与免疫排异）进行物质推演。
+ * 系统会在每个 Tick 依据设定的定律（比例代谢与排异）进行物质推演。
+ *
+ * 支持比例极性 — 物种可配 { ql: 0.7, qs: 0.3 } 等混合理想态。
  */
 export const Reactor = {
   /**
    * 结算反应炉的一个 Tick 的自动化物理过程。
    *
-   * 法则 1. 【基础代谢】默认等比例 burn 掉自身极性的粒子，向外等量排泄相反极性的粒子废料
-   * 法则 2. 【排异反应】强制 burn 掉不平衡的杂质粒子，并且同样输出废料。消耗本体生命。
-   * 法则 3. 【停机寂灭】如果发现主要粒子耗尽（无法 burn），反应炉停机寂灭。
+   * 法则 1. 【比例排异】对比当前体内粒子实际占比 vs 理想占比(ownPolarity)，
+   *         超标粒子按超出量 burn 掉，输出 oppositePolarity 废料
+   * 法则 2. 【基础代谢】默认 burn 核心粒子，向外排泄 oppositePolarity 废料
+   * 法则 3. 【停机寂灭】如果核心粒子耗尽，反应炉停机
    *
    * @param internalPool 反应炉本体的内置储罐
    * @param externalPool 外界大环境的能量海
-   * @param ownPolarity 本体的本我配释，例如纯灵气修真者 { ql: 1.0 }
-   * @param oppositePolarity 排泄废物的配释，例如修真者排出的就是 { qs: 1.0 }
+   * @param ownPolarity 本体的理想粒子比例，如 { ql: 0.7, qs: 0.3 }
    * @param baseBurnRate 本周期的基础代谢规模
    */
   tick(
     internalPool: ParticleBucket,
     externalPool: ParticleBucket,
     ownPolarity: Polarity,
-    oppositePolarity: Polarity,
     baseBurnRate: number,
   ): { alive: boolean; logs: string[] } {
     const logs: string[] = [];
+    const oppositePolarity = ParticleTransfer.invertPolarity(ownPolarity);
 
-    // 获取反应炉的主燃料粒子（在本我极性中占比例大于0的粒子）
+    // 获取反应炉中所有核心粒子（理想占比 > 0 的粒子）
     const coreParticles = Object.keys(ownPolarity).filter(
       (p) => ownPolarity[p] !== undefined && ownPolarity[p]! > 0,
     );
-    // 寻找杂质（体内不属于主要燃料的粒子集合）
-    const impurities = Object.keys(internalPool).filter(
-      (p) => !coreParticles.includes(p) && (internalPool[p] ?? 0) > 0,
-    );
 
-    // [法则 2] 排异反应 (Immune Engine)
-    // 发现任何一丁点不属于 ownPolarity 的粒子，就必须用本身的生命燃料去同归于尽（转化为相反极性）
-    for (const poison of impurities) {
-      const poisonAmount = internalPool[poison] ?? 0;
-      if (poisonAmount <= 0) continue;
+    // 计算体内总量
+    const totalInternal = Object.values(internalPool).reduce((s, v) => s + (v ?? 0), 0);
 
-      // 寻找可用的主燃料去中和它
-      const fuelType = coreParticles[0];
-      if (!fuelType) break;
+    // [法则 1] 比例排异 (Proportional Immune Engine)
+    // 对体内每种粒子，检查实际占比是否超标
+    if (totalInternal > 0) {
+      for (const [pid, amount] of Object.entries(internalPool)) {
+        if ((amount ?? 0) <= 0) continue;
 
-      const fuelAvail = internalPool[fuelType] ?? 0;
-      const amountToBurn = Math.min(poisonAmount, fuelAvail);
+        const idealRatio = ownPolarity[pid] ?? 0;
+        const actualRatio = amount! / totalInternal;
+        const excess = actualRatio - idealRatio;
 
-      if (amountToBurn > 0) {
-        // 极性反转在这里（反应炉逻辑内）发生：
-        // 1. 本源体内消耗 1份生命燃料 和 1份毒素 (Reactants)
-        const reactants: ParticleBucket = { [poison]: amountToBurn, [fuelType]: amountToBurn };
+        if (excess > 0) {
+          // 超标粒子量 = 超出比例 × 总量
+          const excessAmount = Math.floor(excess * totalInternal);
+          if (excessAmount <= 0) continue;
 
-        // 2. 将销毁的总量（1+1=2）反转极性，生成为排放到外界的产物 (Products)
-        const products = ParticleTransfer.createBucket(oppositePolarity, amountToBurn * 2);
+          if (idealRatio === 0) {
+            // 纯异物：用核心燃料 1:1 同归于尽（与旧逻辑一致）
+            const fuelType = coreParticles[0];
+            if (!fuelType) break;
+            const fuelAvail = internalPool[fuelType] ?? 0;
+            const amountToBurn = Math.min(excessAmount, fuelAvail);
 
-        // 3. 严格交由账本原子转换，不凭空捏造和销毁物质
-        ParticleTransfer.transferWithConversion(internalPool, externalPool, reactants, products);
-
-        logs.push(
-          `【免疫排斥】耗费 ${amountToBurn} 个 ${fuelType} 融毁外来的 ${amountToBurn} 杂质，排向外界`,
-        );
+            if (amountToBurn > 0) {
+              const reactants: ParticleBucket = { [pid]: amountToBurn, [fuelType]: amountToBurn };
+              const products = ParticleTransfer.createBucket(oppositePolarity, amountToBurn * 2);
+              ParticleTransfer.transferWithConversion(
+                internalPool,
+                externalPool,
+                reactants,
+                products,
+              );
+              logs.push(
+                `【免疫排斥】耗费 ${amountToBurn} 个 ${fuelType} 融毁外来的 ${amountToBurn} 纯杂质 ${pid}，排向外界`,
+              );
+            }
+          } else {
+            // 比例超标：温和排出多余部分（不消耗核心燃料，只是缓释）
+            const reactants: ParticleBucket = { [pid]: excessAmount };
+            const products = ParticleTransfer.createBucket(oppositePolarity, excessAmount);
+            ParticleTransfer.transferWithConversion(
+              internalPool,
+              externalPool,
+              reactants,
+              products,
+            );
+            logs.push(
+              `【比例调和】${pid} 实际占比 ${(actualRatio * 100).toFixed(1)}% 超过理想 ${(idealRatio * 100).toFixed(1)}%，排出 ${excessAmount} 调节`,
+            );
+          }
+        }
       }
     }
 
-    // [法则 1] 基础代谢 (Baseline Metabolism)
-    // 无论干啥，活着本身就要流失生命燃料到外界，并反转极性
-    const fuelType = coreParticles[0];
-    if (fuelType && (internalPool[fuelType] ?? 0) > 0) {
-      const actualBurned = Math.min(baseBurnRate, internalPool[fuelType]!);
+    // [法则 2] 基础代谢 (Baseline Metabolism)
+    // 消耗核心粒子，按比例分配消耗
+    let burnRemaining = baseBurnRate;
+    for (const fuelType of coreParticles) {
+      const ratio = ownPolarity[fuelType] ?? 0;
+      if (ratio <= 0) continue;
+      const burnForThis = Math.floor(baseBurnRate * ratio);
+      const available = internalPool[fuelType] ?? 0;
+      const actualBurned = Math.min(burnForThis, available);
 
-      const reactants = { [fuelType]: actualBurned };
-      const products = ParticleTransfer.createBucket(oppositePolarity, actualBurned);
-
-      ParticleTransfer.transferWithConversion(internalPool, externalPool, reactants, products);
-      logs.push(`【生命代谢】基础代谢消耗 ${actualBurned} 核心寿命`);
+      if (actualBurned > 0) {
+        const reactants = { [fuelType]: actualBurned };
+        const products = ParticleTransfer.createBucket(oppositePolarity, actualBurned);
+        ParticleTransfer.transferWithConversion(internalPool, externalPool, reactants, products);
+        burnRemaining -= actualBurned;
+      }
+    }
+    if (baseBurnRate - burnRemaining > 0) {
+      logs.push(`【生命代谢】基础代谢消耗 ${baseBurnRate - burnRemaining} 核心寿命`);
     }
 
     // [法则 3] 寂灭停机校验 (Collapse Check)
@@ -106,8 +138,7 @@ export const Reactor = {
    * @param incomingBucket 游离的来袭粒子束（悬空账本）
    * @param sourceMultiplier 攻击发源地的能量密度倍率
    * @param ownMultiplier 被击中者的能量密度倍率
-   * @param ownPolarity 被击中者的本我配释
-   * @param oppositePolarity 废弃物的配释（被中和散溢的能量）
+   * @param ownPolarity 被击中者的理想粒子比例
    */
   processIncomingBeam(
     targetPool: ParticleBucket,
@@ -116,9 +147,9 @@ export const Reactor = {
     sourceMultiplier: number,
     ownMultiplier: number,
     ownPolarity: Polarity,
-    oppositePolarity: Polarity,
   ): { alive: boolean; logs: string[] } {
     const logs: string[] = [];
+    const oppositePolarity = ParticleTransfer.invertPolarity(ownPolarity);
     const coreParticles = Object.keys(ownPolarity).filter(
       (p) => ownPolarity[p] !== undefined && ownPolarity[p]! > 0,
     );
@@ -134,17 +165,18 @@ export const Reactor = {
     for (const [pid, incomingRawAmount] of Object.entries(incomingBucket)) {
       if (incomingRawAmount <= 0) continue;
 
-      if (coreParticles.includes(pid)) {
+      // 根据 ownPolarity 中的权重判断亲和度
+      const affinity = ownPolarity[pid] ?? 0;
+
+      if (affinity > 0) {
         // ==========================================
-        // 【法则 A: 强行灌顶 / 洗劫吸收本源】 (极性相符，试图将 incoming 转化为自身的 fuel)
+        // 【法则 A: 亲和吸收】极性相符（按亲和度权重吸收）
         // ==========================================
         if (densityRatio <= 1) {
-          // 【吸收低阶能量】例如 100点1级灵气，进入10级大佬体内。
-          // 实际只能压榨出 10点10级灵气，剩下的 90点质量无法压缩，作为低阶废气被排泄入世界。物质绝对守恒！
+          // 【吸收低阶能量】
           const gainedYield = Math.floor(incomingRawAmount * densityRatio);
           const waste = incomingRawAmount - gainedYield;
 
-          // 核心转移结算
           ParticleTransfer.transfer(incomingBucket, targetPool, { [pid]: gainedYield });
           if (waste > 0) {
             const wasteProducts = ParticleTransfer.createBucket(oppositePolarity, waste);
@@ -160,9 +192,7 @@ export const Reactor = {
             `【同化】吸纳 ${incomingRawAmount} 稀薄同源物质，压缩提纯得 ${gainedYield} 本源，排出余下 ${waste} 废气`,
           );
         } else {
-          // 【强行灌顶 / 被吸收高阶能量】10点10级灵气，打入1级萌新以内。
-          // 高维质量会引发空间膨胀，10点十级灵气需要膨胀为 100点一级灵气！
-          // 缺少的 90点物质质量，必须强行从大道(external)中虹吸来补足空洞，否则萌新无法容纳。
+          // 【强行灌顶 / 被吸收高阶能量】
           const totalExpansion = Math.floor(incomingRawAmount * densityRatio);
           const deficit = totalExpansion - incomingRawAmount;
 
@@ -170,9 +200,7 @@ export const Reactor = {
           const actualHoned = Math.min(deficit, externalAvailable);
           const actualTotalGain = incomingRawAmount + actualHoned;
 
-          // 本源结转入体
           ParticleTransfer.transfer(incomingBucket, targetPool, { [pid]: incomingRawAmount });
-          // 引爆环境虹吸漩涡！
           if (actualHoned > 0) {
             ParticleTransfer.transfer(externalPool, targetPool, { [pid]: actualHoned });
           }
@@ -183,31 +211,23 @@ export const Reactor = {
         }
       } else {
         // ==========================================
-        // 【法则 B: 攻击打击 / 投毒】 (极性不符，触发排异融毁)
+        // 【法则 B: 攻击打击 / 投毒】（亲和度为 0，纯异物触发排异融毁）
         // ==========================================
-        // 防守方需要的本源燃料 = 攻击方的绝对质量数量 * 密度差
         const requiredFuel = Math.ceil(incomingRawAmount * densityRatio);
         const fuelAvail = targetPool[fuelType] ?? 0;
-
-        // 反应炉拼尽全力能拿来阻挡的量
         const achievableFuel = Math.min(requiredFuel, fuelAvail);
-
-        // 反推多少入侵者被成功中和了？
         const neutralizedBox = requiredFuel > 0 ? achievableFuel / densityRatio : incomingRawAmount;
         const actualNeutralized = Math.min(incomingRawAmount, Math.ceil(neutralizedBox));
 
         if (achievableFuel > 0 || actualNeutralized > 0) {
-          // 中和的过程：己方消耗了 achievableFuel，同时抵消了敌方的 actualNeutralized
           const selfDecayReactants = { [fuelType]: achievableFuel };
 
-          // 敌方物质被中和进了外界废气
           ParticleTransfer.transferWithConversion(
             incomingBucket,
             externalPool,
             { [pid]: actualNeutralized },
             ParticleTransfer.createBucket(oppositePolarity, actualNeutralized),
           );
-          // 己方物质同归于尽变成了废气
           ParticleTransfer.transferWithConversion(
             targetPool,
             externalPool,
@@ -220,8 +240,6 @@ export const Reactor = {
           );
         }
 
-        // 如果有没有被抵消完的毒素，它留存在 incomingBucket 里。
-        // 它冲破了防护网，像脱缰野马一样灌入反应炉内导致结构不可逆故障
         const remainingPoison = incomingBucket[pid] ?? 0;
         if (remainingPoison > 0) {
           ParticleTransfer.transfer(incomingBucket, targetPool, { [pid]: remainingPoison });

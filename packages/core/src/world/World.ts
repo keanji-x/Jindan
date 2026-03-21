@@ -18,6 +18,7 @@ import { UNIVERSE } from "./config/universe.config.js";
 import { EventGraph } from "./EventGraph.js";
 import { EffectPipeline } from "./effects/EffectPipeline.js";
 import { GraphRegistry } from "./effects/GraphRegistry.js";
+import { registerBuiltinGraphs } from "./effects/graphs/index.js";
 import type { ActionOutcome, Effect } from "./effects/types.js";
 import { createEntity } from "./factory.js";
 import { Formatters } from "./formatters.js";
@@ -26,8 +27,11 @@ import { RelationGraph } from "./RelationGraph.js";
 import { ParticleTransfer } from "./reactor/ParticleTransfer.js";
 import { Reactor } from "./reactor/Reactor.js";
 import { ActionRegistry } from "./systems/ActionRegistry.js";
+import { DaoEventSystem } from "./systems/DaoEventSystem.js";
 import { InteractionSystem } from "./systems/InteractionSystem.js";
 import { LifecycleSystem } from "./systems/LifecycleSystem.js";
+import { NpcSocialSystem } from "./systems/NpcSocialSystem.js";
+import { RelationEventSystem } from "./systems/RelationEventSystem.js";
 import { SingleEntitySystem } from "./systems/SingleEntitySystem.js";
 import type { ActionContext, CanExecuteContext } from "./systems/types.js";
 import type {
@@ -36,6 +40,7 @@ import type {
   AvailableAction,
   Entity,
   EntityHistory,
+  RelationTag,
   SpeciesType,
   WorldEvent,
   WorldEventRecord,
@@ -115,6 +120,10 @@ export class World {
     ActionRegistry.registerSystem(SingleEntitySystem);
     ActionRegistry.registerSystem(InteractionSystem);
     ActionRegistry.registerSystem(LifecycleSystem);
+    ActionRegistry.registerSystem(DaoEventSystem);
+    ActionRegistry.registerSystem(RelationEventSystem);
+    ActionRegistry.registerSystem(NpcSocialSystem);
+    registerBuiltinGraphs();
   }
 
   // ── Entity Management (direct storage delegation) ──────
@@ -187,10 +196,15 @@ export class World {
 
     const entity = createEntity(name, species);
 
-    // 粒子守恒：从天地灌注初始粒子（转移，不创造）
+    // 粒子守恒：从天地灌注 birthCost 初始粒子（转移，不创造）
     const tank = entity.components.tank;
     if (tank) {
-      ParticleTransfer.transfer(this.qiPool.state.pools, tank.tanks, { ...tank.maxTanks });
+      const reactor = UNIVERSE.reactors[species];
+      if (reactor) {
+        ParticleTransfer.transfer(this.qiPool.state.pools, tank.tanks, {
+          [tank.coreParticle]: reactor.birthCost,
+        });
+      }
     }
 
     this.setEntity(entity);
@@ -233,7 +247,7 @@ export class World {
         const actDef = ActionRegistry.get(action);
         if (!actDef) return this.fail(`未知行动/功法: ${action}`, tickEvents, entityId);
         const reactorTemplate = UNIVERSE.reactors[entity.species];
-        if (!reactorTemplate?.actions.includes(actDef.id)) {
+        if (!reactorTemplate?.actions.some((a) => a.id === actDef.id)) {
           const speciesName = reactorTemplate?.name ?? entity.species;
           return this.fail(`${speciesName}无法执行「${actDef.name}」`, tickEvents, entityId);
         }
@@ -436,6 +450,7 @@ export class World {
       deadEntities,
       ambientPool: this.qiPool.state,
       events: this.events,
+      world: this,
       addEntity: (e: Entity) => this.setEntity(e),
       reincarnateEntity: (entityId: string, newName: string, newSpecies: string) =>
         this.reincarnate(entityId, newName, newSpecies),
@@ -461,16 +476,7 @@ export class World {
     // 1.5 被动系统结算后的生命周期检查
     this.checkLifecycle();
 
-    // 2. 动态容量结算与虚空放逐 (防刷核心机制)
-    const eco = UNIVERSE.ecology;
-    let maxCap = eco.baseAmbientCap;
-    for (const e of aliveEntities) {
-      const reactor = UNIVERSE.reactors[e.species];
-      maxCap += reactor?.ambientCapContribution ?? 0;
-    }
-    const ambient = this.qiPool.state;
-    if ((ambient.pools.ql ?? 0) > maxCap) ambient.pools.ql = maxCap;
-    if ((ambient.pools.qs ?? 0) > maxCap) ambient.pools.qs = maxCap;
+    // 天道裁决现已通过 DrainSystem 中的 DaoJudgment 处理，不再需要静态容量限制
 
     this.events.emit({
       tick: this._tick,
@@ -597,9 +603,7 @@ export class World {
       if (e?.components.cultivation) {
         e.components.cultivation.realm = effect.realm;
       }
-      if (e?.components.tank) {
-        e.components.tank.maxTanks = { ...effect.newMaxTanks };
-      }
+      // proportionLimit is a function on the ReactorTemplate, not stored on entity
     } else if (effect.type === "set_status") {
       const e = this.getEntity(effect.entityId);
       if (e) e.status = effect.status;
@@ -617,7 +621,6 @@ export class World {
           UNIVERSE.ecology.ambientDensity,
           effect.sourceRealm,
           template.ownPolarity,
-          template.oppositePolarity,
         );
         if (!alive) {
           e.status = "lingering"; // Mark as dead if reactor explodes
@@ -635,6 +638,24 @@ export class World {
     } else if (effect.type === "sync_ambient") {
       // Replace ambient pools entirely to match resolver simulation
       this.qiPool.state.pools = { ...effect.pools };
+    } else if (effect.type === "add_relation_tag") {
+      this.relations.addTag(effect.a, effect.b, effect.tag as RelationTag);
+    } else if (effect.type === "remove_relation_tag") {
+      this.relations.removeTag(effect.a, effect.b, effect.tag as RelationTag);
+    } else if (effect.type === "create_entity") {
+      try {
+        const child = this.createEntity(effect.name, effect.species);
+        // Link parents via RelationTags
+        if (effect.parentIds) {
+          for (const parentId of effect.parentIds) {
+            this.relations.addTag(parentId, child.id, "parent" as RelationTag);
+            this.relations.addTag(child.id, parentId, "child" as RelationTag);
+            this.relations.adjust(parentId, child.id, 50);
+          }
+        }
+      } catch (_err) {
+        // Entity creation can fail (e.g. world full) — silently skip
+      }
     }
   }
 
@@ -778,10 +799,15 @@ export class World {
       events: [],
     };
 
-    // 粒子守恒：从天地灌注粒子（转移，不创造）
+    // 粒子守恒：从天地灌注 birthCost 粒子（转移，不创造）
     const tank = entity.components.tank;
     if (tank) {
-      ParticleTransfer.transfer(this.qiPool.state.pools, tank.tanks, { ...tank.maxTanks });
+      const reactor = UNIVERSE.reactors[newSpecies];
+      if (reactor) {
+        ParticleTransfer.transfer(this.qiPool.state.pools, tank.tanks, {
+          [tank.coreParticle]: reactor.birthCost,
+        });
+      }
     }
 
     this.events.emit({

@@ -56,9 +56,11 @@ describe("ActionGraph Execution (Gongfa)", () => {
     const finalQi = entity.components.tank!.tanks[core]!;
     expect(finalQi).toBeGreaterThan(qiAfterTick1);
 
-    // Wait, let's verify if we settle one more time, nothing happens because graph cleared
+    // After graph completes, settle should still apply passive drain (DaoJudgment)
+    // but entity keeps its qi (may lose small amount to drain)
     const snapshotQi = finalQi;
     world.settle();
-    expect(entity.components.tank!.tanks[core]!).toBe(snapshotQi); // no passive meditation without graph
+    // Qi may decrease slightly due to passive drain, but shouldnt increase
+    expect(entity.components.tank!.tanks[core]!).toBeLessThanOrEqual(snapshotQi);
   });
 });

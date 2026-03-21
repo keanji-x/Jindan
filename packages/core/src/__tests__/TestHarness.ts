@@ -7,6 +7,7 @@
 // ============================================================
 
 import { AiRegistry } from "../world/brains/OptimizerRegistry.js";
+import { UNIVERSE } from "../world/config/universe.config.js";
 import type {
   ActionId,
   ActionResult,
@@ -150,8 +151,11 @@ export class TestHarness {
         const tank = npc.components.tank;
         const core = tank?.coreParticle ?? "ql";
         const qiCurrent = tank ? (tank.tanks[core] ?? 0) : 0;
-        const qiMax = tank ? (tank.maxTanks[core] ?? 1) : 1;
-        const qiRatio = qiCurrent / qiMax;
+        const reactor = this.world.getEntity(npc.id) ? UNIVERSE.reactors[npc.species] : undefined;
+        const realm = npc.components.cultivation?.realm ?? 1;
+        const speciesLimit = reactor?.proportionLimit(realm) ?? 0.05;
+        const qiMax = Math.floor(speciesLimit * UNIVERSE.totalParticles);
+        const qiRatio = qiMax > 0 ? qiCurrent / qiMax : 0;
         const decision = brain.decide(actions, { qiCurrent, qiMax, qiRatio });
         if (decision) {
           this.world.performAction(npc.id, decision.action, decision.targetId);
@@ -327,7 +331,7 @@ export class TestHarness {
           name: e.name,
           species: e.species,
           qi: tank?.tanks[core] ?? 0,
-          maxQi: tank?.maxTanks[core] ?? 0,
+          maxQi: 0, // Proportion-based: no static cap
           realm: e.components.cultivation?.realm ?? 0,
         };
       })

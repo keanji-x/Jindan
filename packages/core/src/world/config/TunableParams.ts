@@ -1,18 +1,15 @@
 // ============================================================
 // TunableParams — 7-dimensional search space for world balance
 //
-// All params expressed as ratios of baseTanks(1) so species
-// scale proportionally. applyParams() patches UNIVERSE in-place.
+// All params expressed as ratios. applyParams() patches UNIVERSE in-place.
 // ============================================================
 
 import { UNIVERSE } from "./universe.config.js";
 
 export interface SearchParams {
-  /** Per-tick drain as fraction of baseTanks(1). e.g. 0.01 → human drains 1/tick */
+  /** Per-tick drain as fraction of birthCost. e.g. 0.01 → human drains ~0.5/tick */
   drainRatio: number;
-  /** Per-action absorb as fraction of baseTanks(1). e.g. 0.2 → human absorbs 20/action */
-  absorbRatio: number;
-  /** Breakthrough cost as fraction of baseTanks(1) × realm */
+  /** Breakthrough cost as fraction of birthCost × realm */
   breakthroughCostRatio: number;
   /** Base probability of breakthrough success */
   breakthroughSuccessRate: number;
@@ -20,7 +17,7 @@ export interface SearchParams {
   spawnBaseChance: number;
   /** Plant respawn chance per tick when below minimum */
   ecologyResilience: number;
-  /** Required qi ratio to attempt breakthrough (e.g. 0.8) */
+  /** Required qi proportion ratio to attempt breakthrough (e.g. 0.8 of proportionLimit) */
   breakthroughThreshold: number;
   /** Exponential base for realm-scaled drain (e.g. 1.5) */
   drainBase: number;
@@ -32,7 +29,6 @@ export interface SearchParams {
 
 export const PARAM_RANGES: Record<keyof SearchParams, [number, number]> = {
   drainRatio: [0.005, 0.05],
-  absorbRatio: [0.05, 0.4],
   breakthroughCostRatio: [0.2, 0.6],
   breakthroughSuccessRate: [0.1, 0.6],
   spawnBaseChance: [0.005, 0.05],
@@ -45,7 +41,6 @@ export const PARAM_RANGES: Record<keyof SearchParams, [number, number]> = {
 
 export const DEFAULT_PARAMS: SearchParams = {
   drainRatio: 0.01,
-  absorbRatio: 0.2,
   breakthroughCostRatio: 0.4,
   breakthroughSuccessRate: 0.25,
   spawnBaseChance: 0.02,
@@ -58,39 +53,25 @@ export const DEFAULT_PARAMS: SearchParams = {
 
 /** Apply search params to UNIVERSE config (mutates in-place) */
 export function applyParams(p: SearchParams): void {
-  // Drain: ratio × baseTanks(1)
+  // Drain: ratio × birthCost
   for (const [species, reactor] of Object.entries(UNIVERSE.reactors)) {
-    const cap = Object.values(reactor.baseTanks(1)).reduce((a, b) => a + b, 0);
+    const cap = reactor.birthCost || 50;
     (UNIVERSE.reactors as Record<string, typeof reactor>)[species] = {
       ...reactor,
       baseDrainRate: Math.max(1, Math.round(cap * p.drainRatio)),
     };
   }
 
-  // Absorb: ratio × baseTanks(1)
+  // Breakthrough
   const biologicalReactors = Object.values(UNIVERSE.reactors).filter(
-    (r) => r.id !== "sect" && r.id !== "artifact" && !r.id.startsWith("artifact_"),
+    (r) =>
+      r.id !== "sect" && r.id !== "artifact" && !r.id.startsWith("artifact_") && r.id !== "dao",
   );
 
   const averageCap =
-    biologicalReactors.reduce((sum, r) => sum + (r.baseTanks(1)[r.coreParticle] ?? 100), 0) /
+    biologicalReactors.reduce((sum, r) => sum + (r.birthCost || 50), 0) /
     Math.max(1, biologicalReactors.length);
 
-  for (const reactor of biologicalReactors) {
-    const cap = reactor.baseTanks(1)[reactor.coreParticle] ?? 100;
-
-    if (reactor.actions.includes("meditate")) {
-      UNIVERSE.absorb.meditate = { base: Math.round(cap * p.absorbRatio), perRealm: 5 };
-    }
-    if (reactor.actions.includes("moonlight")) {
-      UNIVERSE.absorb.moonlight = { base: Math.round(cap * p.absorbRatio), perRealm: 5 };
-    }
-    if (reactor.actions.includes("photosynth")) {
-      UNIVERSE.absorb.photosynth = { base: Math.round(cap * p.absorbRatio * 0.4), perRealm: 2 };
-    }
-  }
-
-  // Breakthrough
   UNIVERSE.breakthrough.qiCostPerRealm = Math.round(averageCap * p.breakthroughCostRatio * 0.1);
   UNIVERSE.breakthrough.minQiRatio = p.breakthroughThreshold;
   UNIVERSE.breakthrough.baseSuccessRate = p.breakthroughSuccessRate;

@@ -63,8 +63,8 @@ describe("ActionRegistry", () => {
     // Mock UNIVERSE.reactors for this test since forSpecies depends on it now.
     const originalReactors = UNIVERSE.reactors;
     UNIVERSE.reactors = {
-      human: { actions: ["action1", "action2"] },
-      beast: { actions: ["action2"] },
+      human: { actions: [mockAction1, mockAction2] },
+      beast: { actions: [mockAction2] },
       plant: { actions: [] },
     } as any;
 

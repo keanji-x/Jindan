@@ -137,9 +137,14 @@ describe("World E2E — Fluent Harness", () => {
 
     it("should drain entities each tick", () => {
       harness = world();
-      harness.createHuman("被消耗者");
+      const human = harness.createHuman("被消耗者");
+      // Give entity enough qi so drain amounts survive Math.floor truncation
+      human.components.tank!.tanks.ql = 500;
+      // Lower ambient so density < 1, which enables dissipation to fire
+      // (when density = 1, dissipation = exp(k*0) - 1 = 0)
+      harness.world.qiPool.state.pools.ql = 50;
 
-      harness.run(2).check((h) => h.assertEventEmitted("entity_drained"));
+      harness.run(5).check((h) => h.assertEventEmitted("entity_drained"));
     });
   });
   // ── 6. 完整模拟 — 不崩溃 ──────────────────────────────────

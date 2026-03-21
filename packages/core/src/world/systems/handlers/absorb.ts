@@ -1,8 +1,9 @@
 // ============================================================
 // AbsorbSystem — handler (物理逻辑)
 //
-// 吸收灵气: 打坐 / 月华 / 光合
-// Uses ParticleTransfer and Reactor.processIncomingBeam.
+// 吸收粒子: 打坐 / 月华 / 光合
+// 双向流模型: 根据 absorbSource 从对手方吸取粒子，无上限。
+// 吸收倍率在 1 附近随机扰动。
 // ============================================================
 
 import { UNIVERSE } from "../../config/universe.config.js";
@@ -28,14 +29,23 @@ export const doAbsorb: ActionResolver = (entity, actionId, context) => {
 
   const core = tankComp.coreParticle;
 
-  // 1. 发动代价已经在 World 中被统扣了 (如果失败或 aborted 会退还)
+  // 1. 发动代价已经在 World 中被统扣了
 
-  // 2. 算定吸纳的总游离量
-  const cfg = UNIVERSE.absorb[action];
-  if (!cfg) {
-    return { status: "aborted", reason: `未知吸收动作: ${action}` };
+  // 2. 算定吸纳的总游离量（无上限，倍率 ≈ 1 附近随机扰动）
+  const reactorTemplate = UNIVERSE.reactors[entity.species];
+  const actionDef = reactorTemplate?.actions.find((a) => a.id === action);
+  const absorbRate = actionDef?.absorbRate;
+  if (!absorbRate) {
+    return { status: "aborted", reason: `无吸收参数: ${action}` };
   }
-  const pullAmount = cfg.base + cfg.perRealm * cultComp.realm;
+  const basePull = absorbRate.base + absorbRate.perRealm * cultComp.realm;
+  // 吸收倍率在 0.8~1.2 之间随机，模拟天道不确定性
+  const absorptionMultiplier = 0.8 + Math.random() * 0.4;
+  const pullAmount = Math.floor(basePull * absorptionMultiplier);
+
+  // 根据 absorbSource 决定从哪里拉粒子
+  // 对于普通生物（absorbSource: "dao"），从 ambient pool 拉
+  // TODO: "members" 模式需要从弟子身上拉（宗门用）
   const available = ambientPool.pools[core] ?? 0;
 
   const exactExtracted = Math.floor(Math.min(pullAmount, available));
@@ -62,40 +72,26 @@ export const doAbsorb: ActionResolver = (entity, actionId, context) => {
     ParticleTransfer.transfer(simAmbient, incomingBucket, { [core]: exactExtracted });
   }
 
-  const reactorTemplate = UNIVERSE.reactors[entity.species];
-  if (!reactorTemplate) return { status: "aborted", reason: "无反应炉配置" };
+  const speciesReactor = UNIVERSE.reactors[entity.species];
+  if (!speciesReactor) return { status: "aborted", reason: "无反应炉配置" };
 
   const startQi = tankComp.tanks[core] ?? 0;
 
-  // 3. 将天地灵气打入自己的虚拟反应炉
+  // 3. 将粒子打入自己的虚拟反应炉（无上限，不再有 overflow dump）
   const { alive, logs } = Reactor.processIncomingBeam(
     simTank,
     simAmbient,
     incomingBucket,
     UNIVERSE.ecology.ambientDensity,
     cultComp.realm,
-    reactorTemplate.ownPolarity,
-    reactorTemplate.oppositePolarity,
+    speciesReactor.ownPolarity,
   );
 
-  // 4. 超载判定 (Tank Overflow Dump)
-  const coreMax = tankComp.maxTanks[core] ?? 0;
-  const currentQi = simTank[core] ?? 0;
-  let overflow = 0;
-  if (currentQi > coreMax) {
-    overflow = currentQi - coreMax;
-    ParticleTransfer.transferWithConversion(
-      simTank,
-      simAmbient,
-      { [core]: overflow },
-      ParticleTransfer.createBucket(reactorTemplate.oppositePolarity, overflow),
-    );
-  }
+  // 不再有 Tank Overflow Dump — 天道裁决在 tick 结算时统一处理
 
   const finalQi = simTank[core] ?? 0;
   const actualNetGained = finalQi - startQi;
 
-  // We only sync tank and ambient if there was any mutation or if the entity is actually interacting
   effects.push({
     type: "sync_tank",
     entityId: entity.id,
@@ -108,9 +104,6 @@ export const doAbsorb: ActionResolver = (entity, actionId, context) => {
   });
 
   if (!alive) {
-    // Note: status here dictates whether action sequence "succeeds"
-    // Usually death is a catastrophic failure, but the Action has been successfully *processed*.
-    // However, the node failed its real purpose.
     effects.push({
       type: "set_status",
       entityId: entity.id,
@@ -145,7 +138,7 @@ export const doAbsorb: ActionResolver = (entity, actionId, context) => {
           absorbed: actualNetGained,
           newQi: finalQi,
         },
-        message: Formatters.absorbSuccess(entity, exactExtracted, actualNetGained, overflow),
+        message: Formatters.absorbSuccess(entity, exactExtracted, actualNetGained, 0),
       },
     });
 

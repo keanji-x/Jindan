@@ -6,7 +6,7 @@
 // ============================================================
 
 import type { ActionId, AvailableAction, Entity } from "@jindan/core";
-import { World } from "@jindan/core";
+import { UNIVERSE, World } from "@jindan/core";
 
 // ── Chat Log ────────────────────────────────────────────────
 
@@ -200,8 +200,11 @@ export class AgentHarness {
     const tank = entity.components.tank!;
     const core = tank.coreParticle;
     const qi = tank.tanks[core];
-    const maxQi = tank.maxTanks[core];
     const cult = entity.components.cultivation;
+    const reactor = UNIVERSE.reactors[entity.species];
+    const maxQi = reactor
+      ? Math.floor(reactor.proportionLimit(cult?.realm ?? 1) * UNIVERSE.totalParticles)
+      : 1;
     const snapshot = this.world.getSnapshot();
 
     // ── Observe ──
@@ -210,7 +213,7 @@ export class AgentHarness {
       entityName: entity.name,
       qi,
       maxQi,
-      qiRatio: qi / maxQi,
+      qiRatio: maxQi > 0 ? qi / maxQi : 0,
       realm: cult?.realm ?? 0,
       power: 0,
       worldTick: this.world.tick,
@@ -256,10 +259,15 @@ export class AgentHarness {
     // ── Post-state ──
     const postEntity = this.world.getEntity(this._entityId);
     const postTank = postEntity?.components.tank;
+    const postReactor = postEntity ? UNIVERSE.reactors[postEntity.species] : undefined;
+    const postRealm = postEntity?.components.cultivation?.realm ?? 1;
+    const postMaxQi = postReactor
+      ? Math.floor(postReactor.proportionLimit(postRealm) * UNIVERSE.totalParticles)
+      : 0;
     const postState: CycleRecord["postState"] = {
       qi: postTank?.tanks[core] ?? 0,
-      maxQi: postTank?.maxTanks[core] ?? 0,
-      realm: postEntity?.components.cultivation?.realm ?? 0,
+      maxQi: postMaxQi,
+      realm: postRealm,
       tick: this.world.tick,
       entityStatus: postEntity?.status ?? "unknown",
     };

@@ -1,7 +1,8 @@
 // ============================================================
 // BreakthroughSystem — handler (物理逻辑)
 //
-// 境界突破: 使用 ParticleTransfer 模拟维度相变
+// 境界突破: 占比接近物种容忍上限时可突破
+// 突破后 proportionLimit 随 realm 提高
 // ============================================================
 
 import { UNIVERSE } from "../../config/universe.config.js";
@@ -22,24 +23,35 @@ export const doBreakthrough: ActionResolver = (entity, _actionId, context) => {
   }
 
   const core = tankComp.coreParticle;
-  const coreMax = tankComp.maxTanks[core] ?? 1;
-  const coreAvailableAfterCost = tankComp.tanks[core] ?? 0;
+  const coreQi = tankComp.tanks[core] ?? 0;
+  const reactorTemplate = UNIVERSE.reactors[entity.species];
+  if (!reactorTemplate) return { status: "aborted", reason: "无反应炉配置" };
 
-  // Breakthrough check (enough accumulated qi relative to max capacity)
+  // 占比判定突破条件
   const bt = UNIVERSE.breakthrough;
-  // 阈值拦截计算 (这里算 aborted)
-  if (coreAvailableAfterCost / coreMax < bt.minQiRatio) {
-    return { status: "aborted", reason: `灵气未臻圆满(需${Math.round(bt.minQiRatio * 100)}%容量)` };
+  const worldTotal = ambientPool.total;
+  const currentProportion = worldTotal > 0 ? coreQi / worldTotal : 0;
+  const speciesLimit = reactorTemplate.proportionLimit(cultComp.realm);
+
+  // 需要占比达到物种容忍比例的 minQiRatio 才能尝试突破
+  // 例: limit=0.05, minQiRatio=0.9 → 需占比达到 0.045
+  if (currentProportion < speciesLimit * bt.minQiRatio) {
+    return {
+      status: "aborted",
+      reason: `灵气占比不足(需${Math.round(speciesLimit * bt.minQiRatio * 100)}%世界总量)`,
+    };
   }
 
   // 动态突破概率判定
-  const qiRatio = coreAvailableAfterCost / coreMax;
-  const progress = Math.min(1.0, (qiRatio - bt.minQiRatio) / (1 - bt.minQiRatio));
+  const progress = Math.min(
+    1.0,
+    (currentProportion - speciesLimit * bt.minQiRatio) /
+      (speciesLimit * (1 - bt.minQiRatio) || 0.01),
+  );
   const actualSuccessRate =
     bt.baseSuccessRate + progress * (bt.maxSuccessRate - bt.baseSuccessRate);
 
   if (Math.random() > actualSuccessRate) {
-    // 突破失败，走 failure 分支并且 emit 警告事件
     const failEvent: Effect = {
       type: "emit_event",
       event: {
@@ -57,12 +69,9 @@ export const doBreakthrough: ActionResolver = (entity, _actionId, context) => {
   }
 
   // ==========================================
-  // 【升维烈焰】 消耗自身 90% 的燃料强行拔高核心约束场维度
-  // Pure Simulation Phase
+  // 【升维烈焰】 消耗自身大量燃料强行拔高核心约束场维度
   // ==========================================
-  const upgradeCost = Math.floor(coreAvailableAfterCost * bt.burnRatio);
-  const reactorTemplate = UNIVERSE.reactors[entity.species];
-  if (!reactorTemplate) return { status: "aborted", reason: "无反应炉配置" };
+  const upgradeCost = Math.floor(coreQi * bt.burnRatio);
 
   const simTank = { ...tankComp.tanks };
   const simAmbient = { ...ambientPool.pools };
@@ -71,11 +80,14 @@ export const doBreakthrough: ActionResolver = (entity, _actionId, context) => {
     simTank,
     simAmbient,
     { [core]: upgradeCost },
-    ParticleTransfer.createBucket(reactorTemplate.oppositePolarity, upgradeCost),
+    ParticleTransfer.createBucket(
+      ParticleTransfer.invertPolarity(reactorTemplate.ownPolarity),
+      upgradeCost,
+    ),
   );
 
   const newRealm = cultComp.realm + 1;
-  const newMaxTanks = reactorTemplate.baseTanks(newRealm);
+  const newProportionLimit = reactorTemplate.proportionLimit(newRealm);
 
   const effects: Effect[] = [];
 
@@ -85,7 +97,7 @@ export const doBreakthrough: ActionResolver = (entity, _actionId, context) => {
     type: "set_realm",
     entityId: entity.id,
     realm: newRealm,
-    newMaxTanks,
+    newProportionLimit,
   });
 
   effects.push({
@@ -104,7 +116,6 @@ export const doBreakthrough: ActionResolver = (entity, _actionId, context) => {
   });
 
   // ========== Phase 3: Dynamic Tribulation Generation ==========
-  // Only trigger tribulation if the realm is significant (e.g. realm 2 and 3 and above)
   const tribGraph = TribulationGenerator.generate(entity, newRealm);
   GraphRegistry.register(tribGraph);
 

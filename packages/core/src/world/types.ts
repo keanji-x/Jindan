@@ -23,8 +23,6 @@ export type LifeStatus = "alive" | "lingering" | "entombed";
 export interface TankComponent {
   /** Current particle amounts keyed by particle id */
   tanks: Record<ParticleId, number>;
-  /** Max capacity per particle */
-  maxTanks: Record<ParticleId, number>;
   /** Which particle constitutes this being's physical body */
   coreParticle: ParticleId;
 }
@@ -71,6 +69,14 @@ export enum RelationTag {
   BloodFeud = "blood_feud",
   Friend = "friend",
   Enemy = "enemy",
+  Parent = "parent",
+  Child = "child",
+  Owner = "owner",
+  Owned = "owned",
+  Enslaver = "enslaver",
+  Enslaved = "enslaved",
+  SectMember = "sect_member",
+  SectLeader = "sect_leader",
 }
 
 /** 实体关系数据 */
@@ -146,6 +152,13 @@ export type WorldEventType =
   | "entity_chat"
   | "entity_tomb"
   | "entity_reincarnated"
+  | "entity_courted"
+  | "entity_acquired"
+  | "entity_enslaved"
+  | "entity_mated"
+  | "entity_spawned_offspring"
+  | "entity_sect_founded"
+  | "entity_recruited"
   | "tick_complete"
   | "system_warning"
   | "report";

@@ -13,7 +13,6 @@ export type * from "./world/config/index.js";
 export { UNIVERSE } from "./world/config/index.js";
 export { createEntity } from "./world/factory.js";
 export {
-  ABSORB_CONFIG,
   BREAKTHROUGH_CONFIG,
   World,
 } from "./world/index.js";

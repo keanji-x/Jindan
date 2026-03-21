@@ -10,5 +10,4 @@ export { UNIVERSE } from "./universe.config.js";
 
 // Convenience re-exports (previously in world/config.ts)
 import { UNIVERSE } from "./universe.config.js";
-export const ABSORB_CONFIG = UNIVERSE.absorb;
 export const BREAKTHROUGH_CONFIG = UNIVERSE.breakthrough;

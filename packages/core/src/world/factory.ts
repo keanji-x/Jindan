@@ -35,8 +35,6 @@ export function createEntity(name: string, species: string, options: SpawnOption
     }
   }
 
-  const maxTanks = reactor.baseTanks(realm);
-
   // 所有粒子槽初始为 0 — 粒子守恒：不凭空创造
   const tanks: Record<ParticleId, number> = {};
   for (const p of UNIVERSE.particles) {
@@ -55,7 +53,7 @@ export function createEntity(name: string, species: string, options: SpawnOption
     sentient: options.sentient ?? true,
     life: { article: "", events: [] },
     components: {
-      tank: { tanks, maxTanks: { ...maxTanks }, coreParticle: reactor.coreParticle },
+      tank: { tanks, coreParticle: reactor.coreParticle },
       cultivation: { realm },
       ...(brainId ? { brain: { id: brainId } } : {}),
     },

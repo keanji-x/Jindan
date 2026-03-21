@@ -71,13 +71,6 @@ export const BeingLedger = {
 
   /**
    * 请求化生一个生灵。地府决定物种和是否轮回。
-   *
-   * 算法:
-   *   1. 位格检查 — 存活数 ≥ 承载力则拒绝
-   *   2. 遍历可自动化生物种（有 npcNames 的）
-   *   3. 按各物种 coreParticle 在环境中的占比算生态权重
-   *   4. 权重 × 缺口 → 加权排序，选出最优物种
-   *   5. entombed 池中找同物种候选 → 轮回优先
    */
   acquire(
     ambientPool: AmbientPool,
@@ -112,10 +105,10 @@ export const BeingLedger = {
       const coreAmount = ambientPool.pools[coreParticle] ?? 0;
       let weight = coreAmount / Math.max(total, 1);
 
-      if (weight <= 0) weight = 0.01; // Allow a minimum chance if canDerive is true
+      if (weight <= 0) weight = 0.01;
 
-      // 需要足额初生代价支付化生
-      const cost = derivedReactor.baseTanks(1)[coreParticle] ?? 50;
+      // 需要足额初生代价 (birthCost) 支付化生
+      const cost = derivedReactor.birthCost;
       if (coreAmount < cost) continue;
 
       candidates.push({ generatorId: id, derivedReactor, weight });
@@ -140,7 +133,6 @@ export const BeingLedger = {
     // 如果这是一个新物种（或变异物种），注册到运行时的 Universe 中
     if (!UNIVERSE.reactors[derivedReactor.id]) {
       UNIVERSE.reactors[derivedReactor.id] = derivedReactor;
-      // The World.ts flush() process will automatically persist newly registered reactors to StorageBackend.
     }
 
     // 轮回优先：在安息者中找同确切物种的候选
