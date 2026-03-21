@@ -6,7 +6,7 @@
 //   2. Headless AI explore: const h = world(); h.run(); h.act(...)
 // ============================================================
 
-import { AiRegistry } from "../world/ai/AiRegistry.js";
+import { AiRegistry } from "../world/brains/OptimizerRegistry.js";
 import type {
   ActionId,
   ActionResult,
@@ -149,8 +149,10 @@ export class TestHarness {
 
         const tank = npc.components.tank;
         const core = tank?.coreParticle ?? "ql";
-        const qiRatio = tank ? (tank.tanks[core] ?? 0) / (tank.maxTanks[core] ?? 1) : 0;
-        const decision = brain.decide(actions, { qiRatio });
+        const qiCurrent = tank ? (tank.tanks[core] ?? 0) : 0;
+        const qiMax = tank ? (tank.maxTanks[core] ?? 1) : 1;
+        const qiRatio = qiCurrent / qiMax;
+        const decision = brain.decide(actions, { qiCurrent, qiMax, qiRatio });
         if (decision) {
           this.world.performAction(npc.id, decision.action, decision.targetId);
         }

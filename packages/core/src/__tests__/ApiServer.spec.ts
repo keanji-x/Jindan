@@ -1,5 +1,5 @@
 import http from "node:http";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { ApiServer } from "../ApiServer.js";
 
 function fetchJson(

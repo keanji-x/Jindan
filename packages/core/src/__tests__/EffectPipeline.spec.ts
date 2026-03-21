@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { EffectPipeline } from "../world/effects/EffectPipeline.js";
 import type { Effect, EffectWorldContext } from "../world/effects/types.js";
 
@@ -21,14 +21,14 @@ describe("EffectPipeline", () => {
   it("should run middlewares in order and allow next() propagation", () => {
     const log: string[] = [];
 
-    pipeline.use((effects, ctx, next) => {
+    pipeline.use((_effects, _ctx, next) => {
       log.push("mw1-enter");
       const res = next();
       log.push("mw1-exit");
       return res;
     });
 
-    pipeline.use((effects, ctx, next) => {
+    pipeline.use((_effects, _ctx, next) => {
       log.push("mw2-enter");
       const res = next();
       log.push("mw2-exit");
@@ -41,12 +41,12 @@ describe("EffectPipeline", () => {
   });
 
   it("should allow a middleware to modify, add or drop effects", () => {
-    pipeline.use((effects, ctx, next) => {
+    pipeline.use((_effects, _ctx, next) => {
       // drop the original effects, provide a new one
       return next().concat([{ type: "appended" } as any]);
     });
 
-    pipeline.use((effects, ctx, next) => {
+    pipeline.use((effects, _ctx, _next) => {
       // map existing effects
       const modified = effects.map((e) => ({ ...e, modified: true }));
       // we must pass `modified` to next? wait, `next()` doesn't take arguments.

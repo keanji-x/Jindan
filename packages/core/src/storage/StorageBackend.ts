@@ -1,4 +1,5 @@
-import type { Entity, QiPoolState, WorldEventRecord } from "../world/types.js";
+import type { ReactorTemplate } from "../world/config/types.js";
+import type { Entity, QiPoolState, RelationData, WorldEventRecord } from "../world/types.js";
 
 /** 用户账户记录 */
 export interface UserRecord {
@@ -70,9 +71,16 @@ export interface StorageBackend {
   // ── Relations ──────────────────────────────────────────
 
   /** 获取持久化的关系图数据 */
-  getRelations(): Record<string, number>;
+  getRelations(): Record<string, RelationData>;
   /** 保存关系图数据 */
-  setRelations(relations: Record<string, number>): void;
+  setRelations(relations: Record<string, RelationData>): void;
+
+  // ── Dynamic Reactors ───────────────────────────────────
+
+  /** 获取持久化的响应炉 (物种) 模板记录 */
+  getReactors(): Record<string, ReactorTemplate>;
+  /** 保存新增的响应炉模板记录 */
+  setReactors(reactors: Record<string, ReactorTemplate>): void;
 
   // ── Persistence Flush ──────────────────────────────────
 

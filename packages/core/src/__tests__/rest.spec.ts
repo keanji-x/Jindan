@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { RestSystem } from "../world/systems/rest/index.js";
+import { RestSystem } from "../world/systems/handlers/rest.js";
 import type { ActionResolver } from "../world/systems/types.js";
 
 describe("RestSystem", () => {

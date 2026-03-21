@@ -2,7 +2,8 @@
 // MemoryStorage — 内存存储后端（原有逻辑的包装）
 // ============================================================
 
-import type { Entity, QiPoolState, WorldEventRecord } from "../world/types.js";
+import type { ReactorTemplate } from "../world/config/types.js";
+import type { Entity, QiPoolState, RelationData, WorldEventRecord } from "../world/types.js";
 import type { StorageBackend, UserRecord } from "./StorageBackend.js";
 
 export class MemoryStorage implements StorageBackend {
@@ -165,14 +166,26 @@ export class MemoryStorage implements StorageBackend {
 
   // ── Relations ──────────────────────────────────────────
 
-  private relationsData: Record<string, number> = {};
+  private relationsData: Record<string, RelationData> = {};
 
-  getRelations(): Record<string, number> {
+  getRelations(): Record<string, RelationData> {
     return this.relationsData;
   }
 
-  setRelations(relations: Record<string, number>): void {
+  setRelations(relations: Record<string, RelationData>): void {
     this.relationsData = relations;
+  }
+
+  // ── Dynamic Reactors ───────────────────────────────────
+
+  private reactorsData: Record<string, ReactorTemplate> = {};
+
+  getReactors(): Record<string, ReactorTemplate> {
+    return this.reactorsData;
+  }
+
+  setReactors(reactors: Record<string, ReactorTemplate>): void {
+    this.reactorsData = reactors;
   }
 
   // ── Persistence Flush ──────────────────────────────────

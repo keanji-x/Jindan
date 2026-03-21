@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { BotService } from "../BotService.js";
-import { World } from "../world/World.js";
 
 describe("BotService", () => {
   let bot: BotService;
@@ -49,15 +48,21 @@ describe("BotService", () => {
     expect(() => bot.userLogin("user1", "wrong")).toThrow(/用户名或密码错误/);
   });
 
-  it("should create character for user and login as bot", () => {
+  it("should attach character for user and login as bot", () => {
     bot.register("user1", "securepass", "testcode");
     const loginRes = bot.userLogin("user1", "securepass");
 
-    const charRes = bot.createCharacterForUser(loginRes.token, "MyChar", "human");
+    mockWorld.getEntity.mockReturnValue({
+      id: "e1",
+      name: "MyChar",
+      species: "human",
+      status: "alive",
+      components: {},
+    });
+
+    const charRes = bot.attachCharacterForUser(loginRes.token, "e1");
     expect(charRes.entityId).toBe("e1");
     expect(charRes.secret).toBeDefined();
-
-    mockWorld.getEntity.mockReturnValue({ id: "e1", name: "MyChar", species: "human" });
 
     const authRes = bot.authenticate(charRes.secret);
     expect(authRes.token).toBeDefined();
@@ -67,9 +72,18 @@ describe("BotService", () => {
   it("should return theme messages if chatting with dead entity", async () => {
     bot.register("u1", "pass", "testcode");
     const loginRes = bot.userLogin("u1", "pass");
-    const char = bot.createCharacterForUser(loginRes.token, "C1", "human");
 
-    mockWorld.getEntity.mockReturnValue({ id: "e1", status: "lingering", name: "C1" });
+    // Entity must be alive to be attached
+    mockWorld.getEntity.mockReturnValue({ id: "e1", status: "alive", name: "C1", components: {} });
+    const char = bot.attachCharacterForUser(loginRes.token, "e1");
+
+    // After attaching, it dies
+    mockWorld.getEntity.mockReturnValue({
+      id: "e1",
+      status: "lingering",
+      name: "C1",
+      components: {},
+    });
     const authRes = bot.authenticate(char.secret);
 
     const reply = await bot.chat(authRes.token, "hello");
@@ -78,14 +92,18 @@ describe("BotService", () => {
 
   it("should enqueue chat if alive", async () => {
     bot.register("u1", "pass", "testcode");
-    const char = bot.createCharacterForUser(bot.userLogin("u1", "pass").token, "C1", "human");
 
-    mockWorld.getEntity.mockReturnValue({ id: "e1", status: "alive", name: "C1" });
+    mockWorld.getEntity.mockReturnValue({ id: "e1", status: "alive", name: "C1", components: {} });
+    const char = bot.attachCharacterForUser(bot.userLogin("u1", "pass").token, "e1");
+
     const token = bot.authenticate(char.secret).token;
     bot.relay.heartbeat("e1"); // make online
 
     // mock enqueueChat rather than waiting
-    vi.spyOn(bot.relay, "enqueueChat").mockResolvedValue({ reply: "bounced" });
+    vi.spyOn(bot.relay, "enqueueChat").mockResolvedValue({
+      reply: "bounced",
+      suggestedActions: [],
+    });
 
     const reply = await bot.chat(token, "msg");
     expect(reply.reply).toBe("bounced");

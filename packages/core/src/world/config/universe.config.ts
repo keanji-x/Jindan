@@ -1,4 +1,5 @@
 import { ALL_BEINGS } from "../beings/index.js";
+import { ALL_GENERATORS } from "../generators/index.js";
 import type { UniverseConfig } from "./types.js";
 
 export const UNIVERSE: UniverseConfig = {
@@ -11,8 +12,11 @@ export const UNIVERSE: UniverseConfig = {
   // ── Equations (化学方程式 - 已被物理极性引擎取代) ───────────────────
   equations: {},
 
-  // ── Reactor Templates (反应炉模板) — 由 beings/ 目录驱动 ─────
+  // ── Reactor Templates (基本模板与动态载入) ─────
   reactors: ALL_BEINGS,
+
+  // ── Species Generators (物种蓝图与变异池) ─────
+  generators: ALL_GENERATORS,
 
   // ── World Constants ────────────────────────────────────────
   totalParticles: 1_000,

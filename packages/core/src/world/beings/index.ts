@@ -5,13 +5,17 @@
 // ============================================================
 
 import type { ReactorTemplate } from "../config/types.js";
+import { ArtifactReactor } from "./artifact.js";
 import { BeastReactor } from "./beast.js";
 import { HumanReactor } from "./human.js";
 import { PlantReactor } from "./plant.js";
+import { SectReactor } from "./sect.js";
 
 /** 所有已注册的生灵类型 */
 export const ALL_BEINGS: Record<string, ReactorTemplate> = {
   [HumanReactor.id]: HumanReactor,
   [BeastReactor.id]: BeastReactor,
   [PlantReactor.id]: PlantReactor,
+  [ArtifactReactor.id]: ArtifactReactor,
+  [SectReactor.id]: SectReactor,
 };

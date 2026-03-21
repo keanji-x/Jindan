@@ -1,13 +1,11 @@
-import { MiasmaBrain } from "./miasma.js";
+import { HeuristicOptimizerBrain } from "./heuristic.js";
 import type { AgentBrain } from "./types.js";
-import { WeedBrain } from "./weed.js";
 
-class AiRegistryClass {
+class OptimizerRegistryClass {
   private brains: Map<string, AgentBrain> = new Map();
 
   constructor() {
-    this.register(WeedBrain);
-    this.register(MiasmaBrain);
+    this.register(HeuristicOptimizerBrain);
   }
 
   register(brain: AgentBrain) {
@@ -19,4 +17,4 @@ class AiRegistryClass {
   }
 }
 
-export const AiRegistry = new AiRegistryClass();
+export const AiRegistry = new OptimizerRegistryClass();

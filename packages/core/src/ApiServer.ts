@@ -10,7 +10,7 @@ import { type WebSocket, WebSocketServer } from "ws";
 import { BotService } from "./BotService.js";
 import { attachFileLogger } from "./logger.js";
 import type { StorageBackend } from "./storage/StorageBackend.js";
-import { AiRegistry } from "./world/ai/AiRegistry.js";
+import { AiRegistry } from "./world/brains/OptimizerRegistry.js";
 import { UNIVERSE } from "./world/config/universe.config.js";
 import type { ActionId, WorldEvent } from "./world/types.js";
 import { World } from "./world/World.js";
@@ -127,10 +127,12 @@ export class ApiServer {
             try {
               const tank = npc.components.tank;
               const core = tank?.coreParticle ?? "ql";
-              const qiRatio = tank ? (tank.tanks[core] ?? 0) / (tank.maxTanks[core] ?? 1) : 0;
+              const qiCurrent = tank ? (tank.tanks[core] ?? 0) : 0;
+              const qiMax = tank ? (tank.maxTanks[core] ?? 1) : 1;
+              const qiRatio = qiCurrent / qiMax;
               const recentEvents = this.world.eventGraph.getRecentForEntity(npc.id);
 
-              const decision = brain.decide(actions, { qiRatio, recentEvents });
+              const decision = brain.decide(actions, { qiCurrent, qiMax, qiRatio, recentEvents });
               if (decision) {
                 this.world.performAction(
                   npc.id,
@@ -420,16 +422,12 @@ export class ApiServer {
 
     // ── Character 路由 ────────────────────────────────────
 
-    if (method === "POST" && path === "/char/create") {
+    if (method === "POST" && path === "/char/attach") {
       const token = this.extractToken(req!);
       if (!token) throw new ApiError("Missing Authorization token");
-      const { name, species } = body as { name?: string; species?: string };
-      if (!name) throw new ApiError("name is required");
-      if (!species || !UNIVERSE.reactors[species])
-        throw new ApiError(
-          `unknown species: ${species}. Available: ${Object.keys(UNIVERSE.reactors).join(", ")}`,
-        );
-      return this.bot.createCharacterForUser(token, name, species);
+      const { entityId, inviteCode } = body as { entityId?: string; inviteCode?: string };
+      if (!entityId) throw new ApiError("entityId is required");
+      return this.bot.attachCharacterForUser(token, entityId, inviteCode);
     }
 
     if (method === "GET" && path === "/char/list") {
@@ -449,18 +447,24 @@ export class ApiServer {
 
     // ── Bot 路由 ─────────────────────────────────────────
 
-    if (method === "POST" && path === "/bot/create") {
-      const { name, species, inviteCode } = body as {
-        name?: string;
-        species?: string;
+    if (method === "POST" && path === "/bot/generate-attach-token") {
+      const { entityId, inviteCode } = body as {
+        entityId?: string;
         inviteCode?: string;
       };
-      if (!name) throw new ApiError("name is required");
-      if (!species || !UNIVERSE.reactors[species])
-        throw new ApiError(
-          `unknown species: ${species}. Available: ${Object.keys(UNIVERSE.reactors).join(", ")}`,
-        );
-      return this.bot.createEntity(name, species, inviteCode);
+      if (!entityId) throw new ApiError("entityId is required");
+      const attachToken = this.bot.generateAttachToken(entityId, inviteCode);
+      return { attachToken };
+    }
+
+    if (method === "POST" && path === "/bot/attach") {
+      const { entityId, attachToken } = body as {
+        entityId?: string;
+        attachToken?: string;
+      };
+      if (!entityId) throw new ApiError("entityId is required");
+      if (!attachToken) throw new ApiError("attachToken is required");
+      return this.bot.attachEntity(entityId, attachToken);
     }
 
     if (method === "POST" && path === "/bot/login") {

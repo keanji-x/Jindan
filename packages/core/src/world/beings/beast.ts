@@ -9,8 +9,8 @@ export const BeastReactor: ReactorTemplate = {
   baseDrainRate: 3,
   ownPolarity: { qs: 1.0, ql: 0.0 },
   oppositePolarity: { qs: 0.0, ql: 1.0 },
-  actions: ["moonlight", "devour", "breakthrough", "rest"],
+  actions: ["moonlight", "devour", "breakthrough", "rest", "chat"],
   ambientCapContribution: 150,
   npcNames: ["噬煞蝇", "变异黑蝇", "巨型噬煞蝇", "群居幼蝇", "煞气巡回蝇"],
-  npcBrainId: "miasma_brain",
+  npcBrainId: "heuristic_optimizer",
 };

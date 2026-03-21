@@ -11,7 +11,7 @@
 //   ActionRegistry.forSpecies("human")   → ActionDef[]
 // ============================================================
 
-import type { SpeciesType } from "../types.js";
+import { UNIVERSE } from "../config/universe.config.js";
 import type { GameSystem } from "./GameSystem.js";
 import type { ActionDef, ActionHandler, ActionResolver } from "./types.js";
 
@@ -58,8 +58,10 @@ export const ActionRegistry = {
   },
 
   /** Get actions available to a species */
-  forSpecies(species: SpeciesType): ActionDef[] {
-    return allActions.filter((a) => a.species.includes(species));
+  forSpecies(species: string): ActionDef[] {
+    const reactor = UNIVERSE.reactors[species];
+    if (!reactor) return [];
+    return allActions.filter((a) => reactor.actions.includes(a.id));
   },
 
   /** Get qi cost of an action (0 if unknown) */

@@ -72,11 +72,11 @@ export interface CharacterInfo {
   power?: number;
 }
 
-export function charCreate(token: string, name: string, species: string) {
+export function charAttach(token: string, entityId: string, inviteCode: string = "") {
   return request<{ entityId: string; secret: string; entity: Record<string, unknown> }>(
     "POST",
-    "/char/create",
-    { name, species },
+    "/char/attach",
+    { entityId, inviteCode },
     token,
   );
 }

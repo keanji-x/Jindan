@@ -68,13 +68,15 @@ export function applyParams(p: SearchParams): void {
   }
 
   // Absorb: ratio × baseTanks(1)
-  const averageCap =
-    Object.values(UNIVERSE.reactors).reduce(
-      (sum, r) => sum + (r.baseTanks(1)[r.coreParticle] ?? 100),
-      0,
-    ) / Math.max(1, Object.keys(UNIVERSE.reactors).length);
+  const biologicalReactors = Object.values(UNIVERSE.reactors).filter(
+    (r) => r.id !== "sect" && r.id !== "artifact" && !r.id.startsWith("artifact_"),
+  );
 
-  for (const reactor of Object.values(UNIVERSE.reactors)) {
+  const averageCap =
+    biologicalReactors.reduce((sum, r) => sum + (r.baseTanks(1)[r.coreParticle] ?? 100), 0) /
+    Math.max(1, biologicalReactors.length);
+
+  for (const reactor of biologicalReactors) {
     const cap = reactor.baseTanks(1)[reactor.coreParticle] ?? 100;
 
     if (reactor.actions.includes("meditate")) {

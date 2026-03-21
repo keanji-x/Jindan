@@ -62,8 +62,8 @@ describe("RelationGraph (关系图)", () => {
 
     const rels = world.relations.getAll(a.id);
     expect(rels).toHaveLength(2);
-    expect(rels.find((r) => r.otherId === b.id)?.score).toBe(50);
-    expect(rels.find((r) => r.otherId === c.id)?.score).toBe(-30);
+    expect(rels.find((r) => r.otherId === b.id)?.data.score).toBe(50);
+    expect(rels.find((r) => r.otherId === c.id)?.data.score).toBe(-30);
   });
 
   it("removeEntity 清除全部关系", () => {
@@ -80,7 +80,7 @@ describe("RelationGraph (关系图)", () => {
     world.relations.set(a.id, b.id, 42);
     const json = world.relations.toJSON();
     const key = makeRelationKey(a.id, b.id);
-    expect(json[key]).toBe(42);
+    expect(json[key]).toEqual({ score: 42, tags: [] });
   });
 
   // ── Integration: relationRange 目标过滤 ─────────────────

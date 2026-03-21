@@ -5,7 +5,7 @@
 // ============================================================
 
 import type { ParticleId } from "../config/types.js";
-import type { Entity, SpeciesType, WorldEvent } from "../types.js";
+import type { Entity, WorldEvent } from "../types.js";
 
 /** 动态传入的上下文环境，解耦具体的 World 类 */
 export interface ActionContext {
@@ -51,8 +51,6 @@ export interface ActionDef {
   cliHelp?: string;
   /** 执行消耗灵气 (回归天地) */
   qiCost: number;
-  /** 哪些物种可用 */
-  species: SpeciesType[];
   /** 是否需要目标 */
   needsTarget: boolean;
   /** 所属系统 ID (注册时由 ActionRegistry 自动填充) */

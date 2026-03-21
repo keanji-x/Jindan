@@ -4,10 +4,9 @@
 // 1 System → 1 Action: chat
 // ============================================================
 
-import type { GameSystem } from "../GameSystem.js";
 import type { ActionResolver } from "../types.js";
 
-const doChat: ActionResolver = (entity, _actionId, context) => {
+export const doChat: ActionResolver = (entity, _actionId, context) => {
   if (!context.target) {
     return {
       status: "aborted",
@@ -50,21 +49,4 @@ const doChat: ActionResolver = (entity, _actionId, context) => {
     ],
     messageSent: true,
   };
-};
-
-export const ChatSystem: GameSystem = {
-  id: "chat",
-  name: "传音",
-  actions: [
-    {
-      id: "chat",
-      name: "传音",
-      description: "向其他生灵发送神念",
-      qiCost: 0,
-      species: ["human", "beast", "plant"],
-      needsTarget: true,
-      relationRange: [-80, 100],
-    },
-  ],
-  handler: doChat,
 };

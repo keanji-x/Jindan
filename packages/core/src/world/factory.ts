@@ -9,12 +9,32 @@
 import { nanoid } from "nanoid";
 import type { ParticleId } from "./config/types.js";
 import { UNIVERSE } from "./config/universe.config.js";
-import type { Entity, SpeciesType } from "./types.js";
+import type { Entity } from "./types.js";
 
-/** Create a player entity — empty vessel, 0 particles */
-export function createEntity(name: string, species: SpeciesType): Entity {
-  const reactor = UNIVERSE.reactors[species]!;
-  const realm = 1;
+export interface SpawnOptions {
+  realm?: number;
+  brainId?: string | null;
+  sentient?: boolean;
+}
+
+/** Create a new entity. If name is empty, it generates one based on the species config. */
+export function createEntity(name: string, species: string, options: SpawnOptions = {}): Entity {
+  const reactor = UNIVERSE.reactors[species];
+  if (!reactor) throw new Error(`Unknown species: ${species}`);
+
+  const realm = options.realm ?? 1;
+
+  // Name resolution
+  let finalName = name;
+  if (!finalName) {
+    if (reactor.npcNames && reactor.npcNames.length > 0) {
+      const baseName = reactor.npcNames[Math.floor(Math.random() * reactor.npcNames.length)]!;
+      finalName = realm > 1 ? `${realm}阶${baseName}` : baseName;
+    } else {
+      finalName = `无名${reactor.name || species}`;
+    }
+  }
+
   const maxTanks = reactor.baseTanks(realm);
 
   // 所有粒子槽初始为 0 — 粒子守恒：不凭空创造
@@ -23,55 +43,23 @@ export function createEntity(name: string, species: SpeciesType): Entity {
     tanks[p.id] = 0;
   }
 
-  return {
+  // 默认挂载物种配置的AI大脑，除非显式覆盖
+  const brainId = options.brainId !== undefined ? options.brainId : reactor.npcBrainId;
+
+  const entity: Entity = {
     id: `${species[0]}_${nanoid(8)}`,
     soulId: nanoid(10),
-    name,
+    name: finalName,
     species,
     status: "alive",
-    sentient: true,
+    sentient: options.sentient ?? true,
     life: { article: "", events: [] },
     components: {
       tank: { tanks, maxTanks: { ...maxTanks }, coreParticle: reactor.coreParticle },
       cultivation: { realm },
+      ...(brainId ? { brain: { id: brainId } } : {}),
     },
   };
-}
 
-/**
- * 通用 NPC 化生工厂 — 空壳 + brain。
- * 粒子守恒：NPC 出生时 tank 为空，由 brain AI 驱动吸纳第一口灵气。
- */
-export function spawnNpc(species: string): Entity {
-  const reactor = UNIVERSE.reactors[species];
-  if (!reactor) throw new Error(`Unknown species: ${species}`);
-  if (!reactor.npcNames || reactor.npcNames.length === 0) {
-    throw new Error(`Species "${species}" has no npcNames — cannot auto-spawn`);
-  }
-
-  const rank = 1 + Math.floor(Math.random() * 2);
-  const maxTanks = reactor.baseTanks(rank);
-
-  const tanks: Record<ParticleId, number> = {};
-  for (const p of UNIVERSE.particles) {
-    tanks[p.id] = 0;
-  }
-
-  const name = reactor.npcNames[Math.floor(Math.random() * reactor.npcNames.length)]!;
-  const displayName = rank > 1 ? `${rank}阶${name}` : name;
-
-  return {
-    id: `${species[0]}_${nanoid(8)}`,
-    soulId: nanoid(10),
-    name: displayName,
-    species,
-    status: "alive",
-    sentient: false,
-    life: { article: "", events: [] },
-    components: {
-      tank: { tanks, maxTanks: { ...maxTanks }, coreParticle: reactor.coreParticle },
-      cultivation: { realm: rank },
-      ...(reactor.npcBrainId ? { brain: { id: reactor.npcBrainId } } : {}),
-    },
-  };
+  return entity;
 }

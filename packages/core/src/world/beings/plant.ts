@@ -9,8 +9,8 @@ export const PlantReactor: ReactorTemplate = {
   baseDrainRate: 1,
   ownPolarity: { ql: 1.0, qs: 0.0 },
   oppositePolarity: { ql: 0.0, qs: 1.0 },
-  actions: ["photosynth", "breakthrough", "rest"],
+  actions: ["photosynth", "breakthrough", "rest", "chat"],
   ambientCapContribution: 100,
   npcNames: ["碧灵草", "矮壮碧灵草", "幽光碧灵草", "簇生碧草", "变异碧草"],
-  npcBrainId: "weed_brain",
+  npcBrainId: "heuristic_optimizer",
 };

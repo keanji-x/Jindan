@@ -8,7 +8,7 @@
 // ============================================================
 
 import type { ParticleId } from "../config/types.js";
-import type { LifeStatus, SpeciesType, WorldEvent } from "../types.js";
+import type { LifeStatus, WorldEvent } from "../types.js";
 
 // ── Effect Types ─────────────────────────────────────────────
 
@@ -160,8 +160,8 @@ export interface ActionGraphDef {
   edges: ActionEdge[];
   /** Override total qi cost (if unset, sum of individual action costs) */
   qiCost?: number;
-  /** Which species can use this graph */
-  species: SpeciesType[];
+  /** Which species can use this graph (optional, for backward compatibility) */
+  species?: string[];
   /** Max executions per tick per entity (default 1) */
   maxPerTick?: number;
 }
