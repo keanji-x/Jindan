@@ -66,6 +66,7 @@ export class ApiServer {
   private readonly http: ReturnType<typeof createServer>;
   private readonly wss: WebSocketServer;
   private readonly clients = new Set<WebSocket>();
+  private tickInterval?: ReturnType<typeof setInterval>;
 
   constructor(options?: { world?: World; storage?: StorageBackend }) {
     const storage = options?.storage;
@@ -116,7 +117,7 @@ export class ApiServer {
   }
 
   private startNpcActorLoop() {
-    setInterval(() => {
+    this.tickInterval = setInterval(() => {
       const npcs = this.world.getAliveEntities().filter((e) => e.components.brain);
       for (const npc of npcs) {
         const brain = AiRegistry.get(npc.components.brain!.id);
@@ -161,6 +162,10 @@ export class ApiServer {
   }
 
   stop(): Promise<void> {
+    if (this.tickInterval) {
+      clearInterval(this.tickInterval);
+      this.tickInterval = undefined;
+    }
     return new Promise((r) => {
       this.wss.close();
       this.http.close(() => r());
