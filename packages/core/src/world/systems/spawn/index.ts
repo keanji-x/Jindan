@@ -2,76 +2,86 @@
 // SpawnSystem — 化生法则 (Stateless entity genesis)
 //
 // 纯被动 System: 无主动 Action，只在 tick 结算新生命的诞生。
+// 委托 BeingLedger 做生态平衡决策，自身只负责执行。
+//
+// 粒子守恒：化生时从 ambient 通过 ParticleTransfer 注入粒子，
+// 绝不凭空创造——粒子从天地转移到实体，总量不变。
 // ============================================================
 
+import { BeingLedger } from "../../beings/BeingLedger.js";
 import { UNIVERSE } from "../../config/universe.config.js";
-import { spawnBeasts, spawnPlants } from "../../factory.js";
+import { spawnNpc } from "../../factory.js";
+import { ParticleTransfer } from "../../reactor/ParticleTransfer.js";
+import type { Entity } from "../../types.js";
 import type { GameSystem, WorldTickContext } from "../GameSystem.js";
 
-// -- Handler implementation --
+/** 从 ambient 转移粒子填满新生灵的 tank（守恒） */
+function fillFromAmbient(entity: Entity, context: WorldTickContext): void {
+  const tank = entity.components.tank;
+  if (!tank) return;
+  // 将 maxTanks 作为转移请求量 — 实际转移量受 ambient 余额限制
+  ParticleTransfer.transfer(context.ambientPool.pools, tank.tanks, { ...tank.maxTanks });
+}
 
 function executeSpawn(context: WorldTickContext): void {
-  const { ambientPool, entities, events, tick, addEntity } = context;
+  const { ambientPool, entities, deadEntities, events, tick, addEntity, reincarnateEntity } =
+    context;
   const eco = UNIVERSE.ecology;
 
-  const ambientQl = ambientPool.pools.ql ?? 0;
-  const ambientQs = ambientPool.pools.qs ?? 0;
-  const ambientTotal = ambientQl + ambientQs;
+  // 概率守门 — 不是每个 tick 都化生
+  if (Math.random() > eco.spawnBaseChance) return;
 
-  // Need minimum ambient qi to spawn anything
-  if (ambientTotal < 20) return;
+  // 问地府：该化生什么？
+  const decision = BeingLedger.acquire(
+    ambientPool,
+    entities,
+    deadEntities,
+    UNIVERSE.totalParticles,
+  );
+  if (!decision) return;
 
-  const qlRatio = ambientQl / ambientTotal;
-  const qsRatio = ambientQs / ambientTotal;
+  const reactor = UNIVERSE.reactors[decision.species];
+  if (!reactor) return;
 
-  // Emptiness factor: fewer entities → higher spawn chance (anti-deadworld)
-  const aliveCount = entities.length;
-  const emptinessFactor = Math.max(0.1, 1 - aliveCount / eco.maxEntities);
+  if (decision.reincarnateFrom) {
+    // ── 轮回 ──────────────────────────────────────────────
+    const npcNames = reactor.npcNames ?? [];
+    const newName = npcNames[Math.floor(Math.random() * npcNames.length)] ?? "无名";
+    const result = reincarnateEntity(decision.reincarnateFrom, newName, decision.species);
 
-  // Check if we can afford to spawn (need enough ambient qi for entity core)
-  const plantReactor = UNIVERSE.reactors.plant;
-  const beastReactor = UNIVERSE.reactors.beast;
-  const plantCost = plantReactor
-    ? (plantReactor.baseTanks(1)[plantReactor.coreParticle] ?? 50)
-    : 50;
-  const beastCost = beastReactor
-    ? (beastReactor.baseTanks(1)[beastReactor.coreParticle] ?? 80)
-    : 80;
+    if (result.success && result.entity) {
+      // 转世后从天地灌注粒子
+      fillFromAmbient(result.entity, context);
 
-  // Plant spawn: driven by QL concentration
-  const plantChance = eco.spawnBaseChance * qlRatio * emptinessFactor;
-  if (Math.random() < plantChance && ambientQl >= plantCost) {
-    // Deduct from ambient BEFORE spawning (conservation)
-    ambientPool.pools.ql = ambientQl - plantCost;
-
-    const plants = spawnPlants(1, ambientPool);
-    for (const p of plants) {
-      addEntity(p);
       events.emit({
         tick,
         type: "entity_created",
-        data: { id: p.id, name: p.name, species: p.species, source: "化生池" },
-        message: `🌱 天地灵蕴凝聚，化生「${p.name}」`,
+        data: {
+          id: result.entity.id,
+          name: result.entity.name,
+          species: result.entity.species,
+          source: "轮回",
+        },
+        message: `🔄 亡灵转世，「${result.entity.name}」重返人间`,
       });
     }
-  }
+  } else {
+    // ── 新生（从天地灌注粒子，守恒转移） ─────────────────
+    const entity = spawnNpc(decision.species);
+    fillFromAmbient(entity, context);
+    addEntity(entity);
 
-  // Beast spawn: driven by QS concentration
-  const beastChance = eco.spawnBaseChance * qsRatio * emptinessFactor;
-  if (Math.random() < beastChance && ambientQs >= beastCost) {
-    // Deduct from ambient BEFORE spawning (conservation)
-    ambientPool.pools.qs = (ambientPool.pools.qs ?? 0) - beastCost;
-
-    const beasts = spawnBeasts(1, ambientPool);
-    for (const b of beasts) {
-      addEntity(b);
-      events.emit({
-        tick,
-        type: "entity_created",
-        data: { id: b.id, name: b.name, species: b.species, source: "化生池" },
-        message: `🦟 煞气浓郁，化生「${b.name}」`,
-      });
-    }
+    events.emit({
+      tick,
+      type: "entity_created",
+      data: {
+        id: entity.id,
+        name: entity.name,
+        species: entity.species,
+        source: "化生池",
+      },
+      message: `🌱 天地灵蕴凝聚，化生「${entity.name}」`,
+    });
   }
 }
 

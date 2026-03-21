@@ -298,9 +298,11 @@ export class ApiServer {
         const name = body.name as string;
         const species = body.species as string;
         if (!name) throw new ApiError("name is required");
-        if (!["human", "beast", "plant"].includes(species))
-          throw new ApiError("species must be human|beast|plant");
-        return this.world.reincarnate(id, name, species as "human" | "beast" | "plant");
+        if (!UNIVERSE.reactors[species])
+          throw new ApiError(
+            `unknown species: ${species}. Available: ${Object.keys(UNIVERSE.reactors).join(", ")}`,
+          );
+        return this.world.reincarnate(id, name, species);
       }
     }
 
@@ -418,9 +420,11 @@ export class ApiServer {
       if (!token) throw new ApiError("Missing Authorization token");
       const { name, species } = body as { name?: string; species?: string };
       if (!name) throw new ApiError("name is required");
-      if (!["human", "beast", "plant"].includes(species || ""))
-        throw new ApiError("species must be human|beast|plant");
-      return this.bot.createCharacterForUser(token, name, species as "human" | "beast" | "plant");
+      if (!species || !UNIVERSE.reactors[species])
+        throw new ApiError(
+          `unknown species: ${species}. Available: ${Object.keys(UNIVERSE.reactors).join(", ")}`,
+        );
+      return this.bot.createCharacterForUser(token, name, species);
     }
 
     if (method === "GET" && path === "/char/list") {
@@ -447,9 +451,11 @@ export class ApiServer {
         inviteCode?: string;
       };
       if (!name) throw new ApiError("name is required");
-      if (!["human", "beast", "plant"].includes(species || ""))
-        throw new ApiError("species must be human|beast|plant");
-      return this.bot.createEntity(name, species as "human" | "beast" | "plant", inviteCode);
+      if (!species || !UNIVERSE.reactors[species])
+        throw new ApiError(
+          `unknown species: ${species}. Available: ${Object.keys(UNIVERSE.reactors).join(", ")}`,
+        );
+      return this.bot.createEntity(name, species, inviteCode);
     }
 
     if (method === "POST" && path === "/bot/login") {

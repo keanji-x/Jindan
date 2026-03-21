@@ -1,10 +1,4 @@
-// ============================================================
-// Universe Config — default binary QL/QS universe
-//
-// All game rules live here as pure data.
-// The engine never hard-codes physics — it reads this.
-// ============================================================
-
+import { ALL_BEINGS } from "../beings/index.js";
 import type { UniverseConfig } from "./types.js";
 
 export const UNIVERSE: UniverseConfig = {
@@ -17,42 +11,8 @@ export const UNIVERSE: UniverseConfig = {
   // ── Equations (化学方程式 - 已被物理极性引擎取代) ───────────────────
   equations: {},
 
-  // ── Reactor Templates (反应炉模板) ─────────────────────────
-  reactors: {
-    human: {
-      id: "human",
-      name: "修士",
-      coreParticle: "ql",
-      baseTanks: (realm) => ({ ql: 200 * realm, qs: 0 }),
-      baseDrainRate: 1,
-      ownPolarity: { ql: 1.0, qs: 0.0 },
-      oppositePolarity: { ql: 0.0, qs: 1.0 },
-      actions: ["meditate", "devour", "breakthrough", "rest"],
-      ambientCapContribution: 200,
-    },
-    beast: {
-      id: "beast",
-      name: "妖兽",
-      coreParticle: "qs",
-      baseTanks: (realm) => ({ qs: 80 * realm, ql: 0 }),
-      baseDrainRate: 3,
-      ownPolarity: { qs: 1.0, ql: 0.0 },
-      oppositePolarity: { qs: 0.0, ql: 1.0 },
-      actions: ["moonlight", "devour", "breakthrough", "rest"],
-      ambientCapContribution: 150,
-    },
-    plant: {
-      id: "plant",
-      name: "灵植",
-      coreParticle: "ql",
-      baseTanks: (realm) => ({ ql: 150 * realm, qs: 0 }),
-      baseDrainRate: 1,
-      ownPolarity: { ql: 1.0, qs: 0.0 },
-      oppositePolarity: { ql: 0.0, qs: 1.0 },
-      actions: ["photosynth", "breakthrough", "rest"],
-      ambientCapContribution: 100,
-    },
-  },
+  // ── Reactor Templates (反应炉模板) — 由 beings/ 目录驱动 ─────
+  reactors: ALL_BEINGS,
 
   // ── World Constants ────────────────────────────────────────
   totalParticles: 1_000,

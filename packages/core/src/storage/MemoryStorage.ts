@@ -163,6 +163,18 @@ export class MemoryStorage implements StorageBackend {
     return this.secretIndex.get(hashedSecret);
   }
 
+  // ── Relations ──────────────────────────────────────────
+
+  private relationsData: Record<string, number> = {};
+
+  getRelations(): Record<string, number> {
+    return this.relationsData;
+  }
+
+  setRelations(relations: Record<string, number>): void {
+    this.relationsData = relations;
+  }
+
   // ── Persistence Flush ──────────────────────────────────
 
   async flush(): Promise<void> {

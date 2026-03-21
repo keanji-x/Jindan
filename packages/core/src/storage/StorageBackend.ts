@@ -67,6 +67,13 @@ export interface StorageBackend {
   /** 通过 hashed secret 反查 entityId */
   getEntityIdBySecret(hashedSecret: string): string | undefined;
 
+  // ── Relations ──────────────────────────────────────────
+
+  /** 获取持久化的关系图数据 */
+  getRelations(): Record<string, number>;
+  /** 保存关系图数据 */
+  setRelations(relations: Record<string, number>): void;
+
   // ── Persistence Flush ──────────────────────────────────
 
   /** 将内存缓存批量写入持久化存储（Memory 后端为 no-op） */

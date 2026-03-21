@@ -190,11 +190,7 @@ ${lifeStatus.life.article || "（无前世记忆，这是第一世）"}
         // Reincarnate: reset entity in-place (entityId stays the same)
         console.log(`[AgentLoop] 🔄 Reincarnating ${id}...`);
         try {
-          const reinResult = await api.reincarnate(
-            id,
-            name,
-            species as "human" | "beast" | "plant",
-          );
+          const reinResult = await api.reincarnate(id, name, species);
           if (reinResult.success) {
             // entityId 不变，心跳无需重启
             logger = new ChatLogger(id, path.resolve(__dirname, "../../logs"));

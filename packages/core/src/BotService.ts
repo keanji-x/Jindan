@@ -14,7 +14,6 @@ import type { ActionId } from "./world/types.js";
 import type { World } from "./world/World.js";
 
 // ── JWT 密钥 ──────────────────────────────────────────────
-const _jwtRaw = process.env.JWT_SECRET;
 const JWT_EXPIRES_IN = "7d";
 
 // ── 邀请码保护 ────────────────────────────────────────────
@@ -47,13 +46,14 @@ export class BotService {
   private readonly jwtSecret: string;
 
   constructor(world: World, storage: StorageBackend) {
-    if (!_jwtRaw) {
+    const secret = process.env.JWT_SECRET;
+    if (!secret) {
       throw new Error(
-        "⚠️  JWT_SECRET 环境变量未设置，拒绝启动！请在 .env 中配置，例如:\n" +
-          '   JWT_SECRET="your-random-secret-at-least-32-chars"',
+        "⚠️  JWT_SECRET 未设置！生产环境请在 .env 中配置，" +
+          "开发模式请使用 DATABASE_URL=memory 自动生成。",
       );
     }
-    this.jwtSecret = _jwtRaw;
+    this.jwtSecret = secret;
     this.world = world;
     this.storage = storage;
     this.relay = new AgentRelay();
@@ -179,7 +179,7 @@ export class BotService {
   createCharacterForUser(
     userToken: string,
     name: string,
-    species: "human" | "beast" | "plant",
+    species: string,
   ): { entityId: string; secret: string; entity: Record<string, unknown> } {
     const { username } = this.verifyUserToken(userToken);
     const user = this.storage.getUser(username);
@@ -233,7 +233,7 @@ export class BotService {
   /** 创建新角色 → 生成 EntitySecret（私钥），只返回一次 */
   createEntity(
     name: string,
-    species: "human" | "beast" | "plant",
+    species: string,
     inviteCode?: string,
   ): {
     entityId: string;

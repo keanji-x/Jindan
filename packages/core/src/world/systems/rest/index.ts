@@ -5,15 +5,33 @@
 // ============================================================
 
 import type { GameSystem } from "../GameSystem.js";
-import type { ActionHandler } from "../types.js";
+import type { ActionResolver } from "../types.js";
 
-const doRest: ActionHandler = (entity, _actionId, ctx) => {
-  const { actionCost } = ctx;
+const doRest: ActionResolver = (entity, actionId, ctx) => {
+  const { actionCost, tick } = ctx;
   const tankComp = entity.components.tank;
-  if (!tankComp) return { success: false, reason: "实体没有粒子储罐" };
+  if (!tankComp) {
+    return {
+      status: "aborted",
+      reason: "实体没有粒子储罐",
+    };
+  }
 
-  // Cost is already deducted by World.performAction
-  return { success: true, rested: true, actionCost };
+  return {
+    status: "success",
+    successEffects: [
+      {
+        type: "emit_event",
+        event: {
+          tick,
+          type: "report",
+          data: { actionCost, actionId },
+          message: `${entity.name} 休息了一个回合`,
+        },
+      },
+    ],
+    rested: true,
+  };
 };
 
 export const RestSystem: GameSystem = {

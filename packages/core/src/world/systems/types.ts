@@ -15,14 +15,27 @@ export interface ActionContext {
   events: { emit: (event: Omit<WorldEvent, "index">) => void };
   target?: Entity;
   payload?: unknown;
+  /** 查询两个实体之间的关系值 (-100 ~ +100)，默认 0 */
+  getRelation(a: string, b: string): number;
+  /** 修改两个实体之间的关系值（增量），返回 clamp 后的新值 */
+  adjustRelation(a: string, b: string, delta: number): number;
 }
 
-/** 统一的 Action 执行器 */
+/** 统一的 Action 执行器 (旧版，待迁移) */
 export type ActionHandler = (
   entity: Entity,
   actionId: string,
   context: ActionContext,
 ) => { success: boolean; [key: string]: unknown };
+
+import type { ActionOutcome } from "../effects/types.js";
+
+/** 新版基于声明式 Effect 的解析器 */
+export type ActionResolver = (
+  entity: Entity,
+  actionId: string,
+  context: ActionContext,
+) => ActionOutcome;
 
 /** 完整的 Action 定义 */
 export interface ActionDef {
@@ -48,12 +61,25 @@ export interface ActionDef {
   showProgress?: (entity: Entity) => string | undefined;
   /** NPC 选择目标时的过滤策略 */
   npcTargetFilter?: "npc-only";
+  /** 对目标的关系值合法区间 [min, max]，目标关系不在范围内则不可选 */
+  relationRange?: [number, number];
   /**
    * [可选] 前置条件校验 — 由各 System 自行判定该 Action 是否可执行。
    * World.canAct 会在通用检查（灵气足够等）之后调用此钩子。
    * 返回 { ok: false, reason } 表示不可执行。
    */
   canExecute?: (entity: Entity, ctx: CanExecuteContext) => { ok: boolean; reason?: string };
+
+  /**
+   * 图谱组装约束（黑名单）
+   * 用于动态拼接 ActionGraph 时的合法性校验
+   */
+  constraints?: {
+    /** 不可以连接在哪些 action 之后执行 (例如：突破后不能紧接休息) */
+    cannotFollow?: string[];
+    /** 不可以连接在哪些 action 之前执行 (例如：死亡前不能触发吸收) */
+    cannotPrecede?: string[];
+  };
 }
 
 /** canExecute 回调的最小世界上下文 — 避免 Action 反向依赖 World 实例 */

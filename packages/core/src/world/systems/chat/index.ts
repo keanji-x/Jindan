@@ -5,11 +5,14 @@
 // ============================================================
 
 import type { GameSystem } from "../GameSystem.js";
-import type { ActionHandler } from "../types.js";
+import type { ActionResolver } from "../types.js";
 
-const doChat: ActionHandler = (entity, _actionId, context) => {
+const doChat: ActionResolver = (entity, _actionId, context) => {
   if (!context.target) {
-    return { success: false, reason: "传音需要指定目标" };
+    return {
+      status: "aborted",
+      reason: "传音需要指定目标",
+    };
   }
 
   const payload = context.payload as Record<string, unknown> | string | undefined;
@@ -22,18 +25,31 @@ const doChat: ActionHandler = (entity, _actionId, context) => {
   const entityName = entity.name || entity.id;
   const targetName = context.target.name || context.target.id;
 
-  context.events.emit({
-    tick: context.tick,
-    type: "entity_chat",
-    data: {
-      entity: { id: entity.id, name: entityName },
-      target: { id: context.target.id, name: targetName },
-      message: messageStr,
-    },
-    message: `${entityName} 向 ${targetName} 传音：「${messageStr}」`,
-  });
-
-  return { success: true, messageSent: true };
+  return {
+    status: "success",
+    successEffects: [
+      {
+        type: "emit_event",
+        event: {
+          tick: context.tick,
+          type: "entity_chat",
+          data: {
+            entity: { id: entity.id, name: entityName },
+            target: { id: context.target.id, name: targetName },
+            message: messageStr,
+          },
+          message: `${entityName} 向 ${targetName} 传音：「${messageStr}」`,
+        },
+      },
+      {
+        type: "adjust_relation",
+        a: entity.id,
+        b: context.target.id,
+        delta: 5,
+      },
+    ],
+    messageSent: true,
+  };
 };
 
 export const ChatSystem: GameSystem = {
@@ -47,6 +63,7 @@ export const ChatSystem: GameSystem = {
       qiCost: 0,
       species: ["human", "beast", "plant"],
       needsTarget: true,
+      relationRange: [-80, 100],
     },
   ],
   handler: doChat,

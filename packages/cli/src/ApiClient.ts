@@ -29,7 +29,7 @@ export class ApiClient {
 
   // ── Entity ─────────────────────────────────────────────
 
-  createEntity(name: string, species: "human" | "beast" | "plant") {
+  createEntity(name: string, species: string) {
     return this.request<Record<string, unknown>>("POST", "/entity/create", {
       name,
       species,
@@ -76,7 +76,7 @@ export class ApiClient {
     return this.request<Record<string, unknown>>("POST", `/entity/${id}/tomb`);
   }
 
-  reincarnate(id: string, name: string, species: "human" | "beast" | "plant") {
+  reincarnate(id: string, name: string, species: string) {
     return this.request<Record<string, unknown>>("POST", `/entity/${id}/reincarnate`, {
       name,
       species,

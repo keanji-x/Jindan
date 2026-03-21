@@ -172,7 +172,7 @@ export class AgentHarness {
 
   constructor(opts: {
     entityName: string;
-    species?: "human" | "beast" | "plant";
+    species?: string;
     llm: MockLlm;
     world?: World;
   }) {

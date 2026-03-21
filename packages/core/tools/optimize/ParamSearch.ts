@@ -2,30 +2,40 @@
 // ParamSearch — Simulated Annealing for world balance
 //
 // Explores the 10D parameter space to maximize WorldScore.
+// Uses robust multi-trial evaluation (mean - α·std) to resist noise.
 // ============================================================
 
 import { applyParams, DEFAULT_PARAMS, perturb, type SearchParams } from "../../src/world/config/TunableParams.js";
-import { evaluateWorld, type WorldScore } from "./WorldEvaluator.js";
+import { evaluateWorldRobust, type RobustScore } from "./WorldEvaluator.js";
 
 export interface AnnealOptions {
   iterations: number;
   ticksPerTrial: number;
+  runsPerEval?: number;
+  alpha?: number;
   initialTemp?: number;
   coolingRate?: number;
 }
 
 export interface AnnealResult {
   bestParams: SearchParams;
-  bestScore: WorldScore;
-  trail: Array<{ iteration: number; score: number; temp: number; accepted: boolean }>;
+  bestScore: RobustScore;
+  trail: Array<{ iteration: number; fitness: number; temp: number; accepted: boolean }>;
 }
 
 export function anneal(opts: AnnealOptions): AnnealResult {
-  const { iterations, ticksPerTrial, initialTemp = 1.0, coolingRate = 0.995 } = opts;
+  const {
+    iterations,
+    ticksPerTrial,
+    runsPerEval = 5,
+    alpha = 0.5,
+    initialTemp = 1.0,
+    coolingRate = 0.995,
+  } = opts;
 
   let current = { ...DEFAULT_PARAMS };
   applyParams(current);
-  let currentScore = evaluateWorld({ ticks: ticksPerTrial });
+  let currentScore = evaluateWorldRobust({ ticks: ticksPerTrial, runs: runsPerEval, alpha });
 
   let best = { ...current };
   let bestScore = { ...currentScore };
@@ -36,9 +46,9 @@ export function anneal(opts: AnnealOptions): AnnealResult {
   for (let i = 0; i < iterations; i++) {
     const candidate = perturb(current);
     applyParams(candidate);
-    const candidateScore = evaluateWorld({ ticks: ticksPerTrial });
+    const candidateScore = evaluateWorldRobust({ ticks: ticksPerTrial, runs: runsPerEval, alpha });
 
-    const delta = candidateScore.total - currentScore.total;
+    const delta = candidateScore.fitness - currentScore.fitness;
     const accepted = delta > 0 || Math.random() < Math.exp(delta / temp);
 
     if (accepted) {
@@ -46,12 +56,12 @@ export function anneal(opts: AnnealOptions): AnnealResult {
       currentScore = candidateScore;
     }
 
-    if (currentScore.total > bestScore.total) {
+    if (currentScore.fitness > bestScore.fitness) {
       best = { ...current };
       bestScore = { ...currentScore };
     }
 
-    trail.push({ iteration: i, score: currentScore.total, temp, accepted });
+    trail.push({ iteration: i, fitness: currentScore.fitness, temp, accepted });
     temp *= coolingRate;
   }
 

@@ -78,7 +78,7 @@ export class ApiClient {
     );
   }
 
-  reincarnate(id: string, name: string, species: "human" | "beast" | "plant") {
+  reincarnate(id: string, name: string, species: string) {
     return this.request<{ success: boolean; entity?: { id: string }; error?: string }>(
       "POST",
       `/entity/${id}/reincarnate`,
