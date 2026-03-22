@@ -48,11 +48,12 @@ export class ApiClient {
 
   // ── Unified Action ─────────────────────────────────────
 
-  performAction(entityId: string, action: ActionId, targetId?: string) {
+  performAction(entityId: string, action: ActionId, targetId?: string, payload?: unknown) {
     return this.request<Record<string, unknown>>("POST", "/action", {
       entityId,
       action,
       targetId,
+      payload,
     });
   }
 
@@ -62,8 +63,12 @@ export class ApiClient {
     return this.request<Record<string, unknown>>("GET", `/entity/${id}/status`);
   }
 
-  performTomb(id: string) {
-    return this.request<Record<string, unknown>>("POST", `/entity/${id}/tomb`);
+  performTomb(id: string, epitaph?: string) {
+    return this.request<Record<string, unknown>>(
+      "POST",
+      `/entity/${id}/tomb`,
+      epitaph ? { epitaph } : undefined,
+    );
   }
 
   reincarnate(id: string, name: string, species: string) {
@@ -71,6 +76,17 @@ export class ApiClient {
       name,
       species,
     });
+  }
+
+  // ── Self resolution ────────────────────────────────────
+
+  /** 通过 secret 解析自己的 entityId（不需要传 id） */
+  async getSelf(): Promise<string> {
+    if (!this.secret) throw new Error("JINDAN_SECRET 未配置，无法识别自己的身份");
+    const res = await this.request<{ entityId: string }>("POST", "/bot/resolve", {
+      secret: this.secret,
+    });
+    return res.entityId;
   }
 
   // ── Query ──────────────────────────────────────────────

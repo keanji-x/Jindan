@@ -88,8 +88,10 @@ export const NpcSocialSystem: GameSystem = {
       // Filter available actions based on current relations with any target
       const availableOptions = socialOptions.filter((opt) => {
         // Check if there's at least one valid target for this action
+        const sameSpecies = opt.actionId === "court";
         return aliveNpcs.some((target) => {
           if (target.id === npc.id) return false;
+          if (sameSpecies && target.species !== npc.species) return false;
           const score = relations.get(npc.id, target.id);
           return score >= opt.minRelation;
         });

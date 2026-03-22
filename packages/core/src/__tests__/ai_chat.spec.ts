@@ -11,9 +11,11 @@ test("AI Chat functionality", () => {
 
   expect(result.success).toBe(true);
 
-  // 2. Target entity's recentEvents in EventGraph receives the chat
+  // 2. Target entity's recentEvents receives the outgoing chat
   const recentEvents = world.eventGraph.getRecentForEntity(ai1.id);
-  const chatEvent = recentEvents.find((e) => (e.type as string) === "entity_chat");
+  const chatEvent = recentEvents.find(
+    (e) => (e.type as string) === "entity_chat" && e.sourceId === player1.id,
+  );
   expect(chatEvent).toBeDefined();
   expect(chatEvent?.sourceId).toBe(player1.id);
   expect(chatEvent?.targetId).toBe(ai1.id);
@@ -23,4 +25,11 @@ test("AI Chat functionality", () => {
   const worldEvent = result.events.find((e) => e.type === "entity_chat");
   expect(worldEvent).toBeDefined();
   expect(worldEvent?.message).toContain("Hello AI!");
+
+  // 4. The reply event is also present (instant reply feature)
+  const replyEvent = result.events.find(
+    (e) => e.type === "entity_chat" && e.message?.includes("回复"),
+  );
+  expect(replyEvent).toBeDefined();
+  expect(replyEvent?.message).toContain("AI1");
 });

@@ -38,7 +38,7 @@ import { DaoEventSystem } from "./systems/DaoEventSystem.js";
 import { InteractionSystem } from "./systems/InteractionSystem.js";
 import { LifecycleSystem } from "./systems/LifecycleSystem.js";
 import { NpcSocialSystem } from "./systems/NpcSocialSystem.js";
-import { RelationEventSystem } from "./systems/RelationEventSystem.js";
+import { RelationEventSystem, resetRelationEventCache } from "./systems/RelationEventSystem.js";
 import { SingleEntitySystem } from "./systems/SingleEntitySystem.js";
 import type { ActionContext, CanExecuteContext } from "./systems/types.js";
 import type {
@@ -89,8 +89,29 @@ export class World {
     if (storage) {
       this._tick = storage.getTick();
       const dynamicReactors = storage.getReactors();
-      for (const [id, template] of Object.entries(dynamicReactors)) {
-        UNIVERSE.reactors[id] = template;
+      for (const [id, persisted] of Object.entries(dynamicReactors)) {
+        const existing = UNIVERSE.reactors[id];
+        if (existing) {
+          // Merge serializable fields only — preserve code-defined functions
+          // (JSON cannot store functions like proportionLimit)
+          // Also skip 'actions' — ActionDef objects carry function properties
+          // (canExecute, showProgress) that are stripped by JSON serialization
+          for (const [key, value] of Object.entries(persisted)) {
+            if (
+              key === "actions" ||
+              typeof value === "function" ||
+              typeof (existing as unknown as Record<string, unknown>)[key] === "function"
+            ) {
+              continue;
+            }
+            (existing as unknown as Record<string, unknown>)[key] = value;
+          }
+        } else {
+          // Unknown species from PG — skip it. JSON cannot store functions like
+          // proportionLimit, so registering a deserialized object would cause
+          // "reactor.proportionLimit is not a function" crashes at tick time.
+          console.warn(`[World] 忽略 PG 中未知物种 reactor: "${id}"（代码中无对应定义）`);
+        }
       }
     }
 
@@ -127,6 +148,7 @@ export class World {
 
   private registerSystems() {
     ActionRegistry._reset();
+    resetRelationEventCache(); // Clear module-level fired-event cache on world (re)init
     ActionRegistry.registerSystem(SingleEntitySystem);
     ActionRegistry.registerSystem(InteractionSystem);
     ActionRegistry.registerSystem(LifecycleSystem);
@@ -144,6 +166,10 @@ export class World {
 
   setEntity(entity: Entity) {
     this.storage.setEntity(entity);
+  }
+
+  getWorldTotal(): number {
+    return UNIVERSE.totalParticles;
   }
 
   getAllEntities(): Entity[] {
@@ -403,21 +429,7 @@ export class World {
       ctx.target = target;
     }
 
-    const rawOutcome = handler(entity, node.actionId, ctx);
-    let outcome: ActionOutcome;
-    if ("status" in rawOutcome) {
-      outcome = rawOutcome as unknown as ActionOutcome;
-    } else {
-      outcome = {
-        status: rawOutcome.success ? "success" : "aborted",
-        successEffects: [],
-        failureEffects: [],
-        abortedEffects: [],
-        reason: rawOutcome.reason as string | undefined,
-        newQi: rawOutcome.newQi,
-        absorbed: rawOutcome.absorbed,
-      };
-    }
+    const outcome: ActionOutcome = handler(entity, node.actionId, ctx);
 
     const isSuccess = outcome.status === "success";
     // Refund cost on abort or failure
@@ -474,7 +486,7 @@ export class World {
     return {
       success: true,
       tick: this._tick,
-      result: rawOutcome,
+      result: outcome,
       events: tickEvents,
       recentEvents: this.eventGraph.getRecentForEntity(entity.id),
       availableActions: entity.status === "alive" ? this.getAvailableActions(entity.id) : [],
@@ -591,10 +603,29 @@ export class World {
             const rel = this.relations.get(entity.id, t.id);
             if (rel < def.relationRange[0] || rel > def.relationRange[1]) continue;
           }
+          // Build description — for devour, append estimated qi gain
+          let desc = `${def.name} -> ${t.name}(${t.id}) [Role: ${t.species}]`;
+          if (def.id === "devour") {
+            const targetTank = t.components.tank;
+            const selfReactor = UNIVERSE.reactors[entity.species];
+            const targetReactor = UNIVERSE.reactors[t.species];
+            if (targetTank && selfReactor && targetReactor) {
+              const targetCore = targetTank.coreParticle;
+              const targetQi = targetTank.tanks[targetCore] ?? 0;
+              // 比较主导粒子：同极同化率高，异极低
+              const dominantKey = (pol: Record<string, number>) =>
+                Object.entries(pol).sort((a, b) => b[1] - a[1])[0]?.[0];
+              const samePolarity =
+                dominantKey(selfReactor.ownPolarity) === dominantKey(targetReactor.ownPolarity);
+              const assimRate = samePolarity ? 0.65 : 0.25;
+              const estimated = Math.floor(targetQi * assimRate);
+              desc = `${def.name} -> ${t.name}(${t.id}) [预估+${estimated}qs]`;
+            }
+          }
           allOptions.push({
             action: def.id as ActionId,
             targetId: t.id,
-            description: `${def.name} -> ${t.name}(${t.id}) [Role: ${t.species}]`,
+            description: desc,
             possible: true,
           });
         }

@@ -55,13 +55,7 @@ AI 在游魂状态用 LLM 为自己写墓志铭，然后带着前世记忆（`so
 
 ## 🎮 世界中的生灵
 
-| 物种 | 核心粒子 | 储罐容量 | 特点 |
-|------|---------|---------|------|
-| 🧔 修士 | 灵 (QL) | 200×境界 | 打坐吸灵，可开山立派 |
-| 🐗 妖兽 | 煞 (QS) | 80×境界 | 吸纳月华，代谢极快 |
-| 🌿 灵植 | 灵 (QL) | 150×境界 | 光合吐纳，食物链底层 |
-| ⚔️ 法宝 | 灵 (QL) | — | 静默实体，可被获取 |
-| 🏛️ 宗门 | — | — | 组织实体，由修士创建 |
+修士、妖兽、灵植——各有天性，自行探索。
 
 ## 🚀 Quick Start 1 — Docker 一键部署
 
@@ -115,7 +109,7 @@ EOF
 just start_agent
 ```
 
-你的 AI 现在活在金丹世界里了。它会自主：🧘 修炼 · ⚔️ 战斗结盟 · 💕 结为道侣 · 📖 写墓志铭 · 🔄 轮回转世
+你的 AI 现在活在金丹世界里了。它会自主：💬 与世界中的生灵交谈 · 🌍 探索自己的故事 · 💕 结为道侣 · 📖 写墓志铭 · 🔄 轮回转世
 
 ### 方式 B：CLI 编程式接入（自定义 AI）
 
@@ -142,12 +136,17 @@ just cli act <entity-id> --plan '[                    # 多步计划
 <summary>📋 CLI 完整命令 & HTTP API</summary>
 
 ```
-just cli ls                          列出所有实体
-just cli snapshot <id>               完整上下文（感知+行动+记忆）
-just cli act <id> <action> [target]  执行动作
-just cli act <id> --plan '[...]'     批量计划（串行，失败即停）
-just cli status <id>                 生死状态
-just cli world                       世界状态
+just cli ls                                   列出所有实体
+just cli snapshot                             完整上下文（感知+行动+记忆）
+just cli act <action> [target] ["消息"]       执行动作（传音可附消息）
+just cli act --plan '[...]'                   批量计划（串行，失败即停）
+just cli status                               生死状态
+just cli world                                世界状态
+```
+
+**传音示例**（目标会即时回复）：
+```bash
+just cli act chat <target-id> "道友，今日天气如何？"
 ```
 
 直接调 HTTP API：

@@ -31,7 +31,10 @@ describe("World", () => {
       if (entity.components.tank) {
         entity.components.tank.tanks[entity.components.tank.coreParticle] = 0;
       }
+      // Prevent random spawns during settle() from interfering with the alive count
+      const spyAcquire = vi.spyOn(BeingLedger, "acquire").mockReturnValue(null);
       world.settle();
+      spyAcquire.mockRestore();
       expect(entity.status).toBe("lingering");
       expect(world.getAliveEntities()).toHaveLength(0);
     });
@@ -87,7 +90,7 @@ describe("World", () => {
       });
       const spyHandler = vi
         .spyOn(ActionRegistry, "getHandler")
-        .mockReturnValue(() => ({ success: true, newQi: 0 }));
+        .mockReturnValue(() => ({ status: "success" as const, successEffects: [] }));
 
       const originalActions = UNIVERSE.reactors["human"].actions;
       UNIVERSE.reactors["human"].actions = [

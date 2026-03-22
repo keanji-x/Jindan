@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import type { CharacterInfo } from "../api/client";
+import logo from "../assets/logo.png";
 import CharacterPanel from "../components/CharacterPanel";
 import ChatPanel from "../components/ChatPanel";
 import WorldPanel from "../components/WorldPanel";
@@ -50,7 +51,10 @@ export default function DashboardPage() {
         <aside className="w-72 border-r border-white/[0.06] flex-shrink-0 overflow-y-auto">
           <div className="p-4 border-b border-white/[0.06]">
             <div className="flex items-center justify-between">
-              <span className="text-sm text-qi font-bold">金丹</span>
+              <div className="flex items-center gap-2">
+                <img src={logo} alt="金丹" className="w-6 h-6 rounded-sm" />
+                <span className="text-sm text-qi font-bold">金丹</span>
+              </div>
               <Link to="/config" className="text-xs text-qi hover:text-qi/80 transition-colors">
                 探索大千
               </Link>

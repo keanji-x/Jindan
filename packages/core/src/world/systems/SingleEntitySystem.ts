@@ -61,9 +61,12 @@ export const BREAKTHROUGH: ActionDef = {
     const proportion = UNIVERSE.totalParticles > 0 ? qi / UNIVERSE.totalParticles : 0;
     const maxRealm = UNIVERSE.breakthrough.maxRealm ?? 10;
     if (cultComp.realm >= maxRealm) return "已是最高境界";
-    return `${Math.floor((proportion / (limit || 0.01)) * 100)}%`;
+    const minQiRatio = UNIVERSE.breakthrough.minQiRatio ?? 0.7;
+    const needed = Math.ceil(limit * minQiRatio * UNIVERSE.totalParticles);
+    const pct = Math.floor((proportion / (limit || 0.01)) * 100);
+    return qi >= needed ? `${pct}% ✓可突破` : `${pct}% (还需 ${needed - qi}qs)`;
   },
-  canExecute: (entity) => {
+  canExecute: (entity, ctx) => {
     const cultComp = entity.components.cultivation;
     if (!cultComp) return { ok: false, reason: "没有修为系统" };
     const tankComp = entity.components.tank;
@@ -74,7 +77,8 @@ export const BREAKTHROUGH: ActionDef = {
     const reactor = UNIVERSE.reactors[entity.species];
     if (!reactor) return { ok: false, reason: "无反应炉配置" };
     const limit = reactor.proportionLimit(cultComp.realm);
-    const proportion = UNIVERSE.totalParticles > 0 ? qi / UNIVERSE.totalParticles : 0;
+    const worldTotal = ctx.getWorldTotal();
+    const proportion = worldTotal > 0 ? qi / worldTotal : 0;
     if (proportion < limit * bt.minQiRatio) return { ok: false, reason: "灵气占比未臻圆满" };
     const maxRealm = bt.maxRealm ?? 10;
     if (cultComp.realm >= maxRealm) return { ok: false, reason: "已是最高境界" };

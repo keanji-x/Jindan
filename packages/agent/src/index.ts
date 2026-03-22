@@ -33,7 +33,7 @@ const { values } = parseArgs({
   },
 });
 
-const entitySecret = values.secret || process.env.JINDAN_SECRET || process.env.ENTITY_SECRET;
+const entitySecret = values.secret || process.env.JINDAN_SECRET;
 const apiKey = values["llm-key"] || process.env.OPENAI_API_KEY;
 const baseUrl = values.url || process.env.OPENAI_BASE_URL || "https://api.openai.com/v1";
 const modelName = values.model || process.env.OPENAI_MODEL || "gpt-4o-mini";

@@ -152,9 +152,125 @@ export class ChatHandler {
 
       return { reply, suggestedActions, entityStatus };
     } catch (err) {
-      console.error("[ChatHandler] LLM call failed:", err);
-      throw new Error(`LLM call failed: ${err instanceof Error ? err.message : String(err)}`);
+      console.warn("[ChatHandler] LLM call failed, using fallback reply:", err);
+
+      // ── 兜底回复：基于上下文的模板 ──────────────────
+      const fallback = this.generateFallbackReply(snapshot);
+      history.push({ role: "assistant", content: fallback });
+      this.chatHistories.set(entityId, history);
+
+      const entityStatus = {
+        id: snapshot.self.id,
+        name: snapshot.self.name,
+        species: snapshot.self.species,
+        speciesName: snapshot.self.speciesName,
+        realm: snapshot.self.realm,
+        qi: snapshot.self.qi,
+        maxQi: snapshot.self.maxQi,
+        qiPercent: snapshot.self.qiPercent,
+        mood: snapshot.self.mood,
+        emotion: snapshot.self.emotion,
+      };
+
+      return { reply: fallback, suggestedActions: [], entityStatus };
     }
+  }
+
+  /**
+   * 基于当前状态生成情境化兜底回复。
+   * 不依赖 LLM，完全由模板池 + 上下文权重决策。
+   */
+  private generateFallbackReply(snapshot: ContextSnapshot): string {
+    const { self, perception, memory } = snapshot;
+    const seed = (self.id.charCodeAt(0) ?? 0) + (snapshot.perception.worldTick ?? 0);
+    const pick = <T>(arr: T[]): T => arr[seed % arr.length];
+
+    // ── 维度 1：自我介绍（有近期事件时优先） ─────────
+    const recentThought = memory.lastThoughts.at(-1);
+    const recentEvent = memory.recentEvents.at(-1);
+    if (recentThought || recentEvent) {
+      const introTemplates = [
+        `我是${self.name}，${recentThought ? `刚才我在想——${recentThought.innerVoice}` : recentEvent ? `不久前${recentEvent.summary}` : ""}`,
+        `${self.name}在此。${recentEvent ? `方才${recentEvent.summary}，心绪未平。` : ""}`,
+        `嗯……我是${self.name}。${recentThought ? `脑中还在转：${recentThought.innerVoice.slice(0, 30)}` : ""}`,
+      ];
+      if (Math.abs(seed) % 3 === 0) return pick(introTemplates);
+    }
+
+    // ── 维度 2：敌意关系 → 鄙视/冷漠 ────────────────
+    const nearestEntity = perception.nearby.at(0);
+    const relation = nearestEntity?.relation ?? 0;
+    if (self.emotion === "angry" || relation < -40) {
+      const contemptTemplates = [
+        "你是什么东西，也配与我说话？",
+        "滚。",
+        `哼，区区${self.realm}阶，有何资格开口。`,
+        "本座不与尔等废话。",
+        "识趣的话，离我远点。",
+        "……（冷冷瞥了一眼，转身离去）",
+      ];
+      return pick(contemptTemplates);
+    }
+
+    // ── 维度 3：低灵气 → 无暇应答 ────────────────────
+    if (self.qiPercent < 20) {
+      const lowQiTemplates = [
+        "灵气将尽，恕不奉陪。",
+        "先让我运功补气……",
+        "……（闭目凝神，显然无暇应答）",
+        "等我渡过此关再说。",
+      ];
+      return pick(lowQiTemplates);
+    }
+
+    // ── 维度 4：高好感 → 友好闲聊 ──────────────────
+    if (relation > 50 || self.emotion === "happy") {
+      const friendlyTemplates = [
+        "哈，你来找我啦？今日天地灵气尤为充盈，当真是好时节。",
+        "今天天气真好，适合出来走走。",
+        "嗯，好啊。你有什么事？",
+        "来得正好，我正感无聊。",
+        "你找我？说吧，我在听。",
+        "今日灵气充足，心情甚好。有何贵干？",
+      ];
+      return pick(friendlyTemplates);
+    }
+
+    // ── 维度 5：疲惫/悲伤 → 消沉 ────────────────────
+    if (self.emotion === "tired" || self.emotion === "sad") {
+      const sadTemplates = [
+        "……嗯。",
+        "你说什么……我没在听。",
+        "算了，随便吧。",
+        "（沉默片刻）……无事。",
+        "不想说话。",
+      ];
+      return pick(sadTemplates);
+    }
+
+    // ── 维度 6：恐惧/警惕 → 紧张 ───────────────────
+    if (self.emotion === "fearful" || self.emotion === "surprised") {
+      const fearTemplates = [
+        "你……你是何人！",
+        "（警觉地后退一步）谁？",
+        "小心些，这附近不安全。",
+        "我没工夫聊，情况不对劲。",
+      ];
+      return pick(fearTemplates);
+    }
+
+    // ── 维度 7：平静默认 → 随缘应答 ─────────────────
+    const defaultTemplates = [
+      "嗯。",
+      "……好。",
+      "随你。",
+      "有何贵干？",
+      `${self.name}在此，说吧。`,
+      "嗯……（沉吟片刻）",
+      "今日天地平静，你找我何事？",
+      "我正在修炼，有话快说。",
+    ];
+    return pick(defaultTemplates);
   }
 
   /** 从 ContextSnapshot 构建精炼的上下文段落 */
