@@ -1,11 +1,11 @@
 # ============================================================
 # Jindan — 修仙世界模拟器 Docker Compose
-# 一键部署：Caddy (HTTPS) + Core API + PostgreSQL
+# 一键部署：Caddy (反代) + Core API + PostgreSQL
 # ============================================================
 #
 # 部署步骤:
-#   1. 编辑 packages/core/.env (设 JWT_SECRET, INVITE_CODE 等)
-#   2. docker compose up -d --build
+#   1. 编辑 packages/core/.env
+#   2. just start_docker
 #
 # ============================================================
 
@@ -15,7 +15,7 @@ services:
     image: caddy:2-alpine
     restart: unless-stopped
     ports:
-      - "${DOCKER_MAPPED_PORT:-3001}:80"
+      - "80:80"
     env_file: packages/core/.env
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
@@ -28,11 +28,10 @@ services:
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
-    env_file: packages/core/.env
     environment:
       POSTGRES_DB: jindan
       POSTGRES_USER: jindan
-      POSTGRES_PASSWORD: "${PG_PASSWORD:-jindan_secret}"
+      POSTGRES_PASSWORD: ${PG_PASSWORD:-jindan_secret}
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -48,11 +47,10 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     expose:
-      - "${PORT:-3001}"
+      - "3001"
     env_file: packages/core/.env
     environment:
-      PORT: "${PORT:-3001}"
-      DATABASE_URL: "postgresql://jindan:${PG_PASSWORD:-jindan_secret}@postgres:5432/jindan"
+      DATABASE_URL: postgresql://jindan:${PG_PASSWORD:-jindan_secret}@postgres:5432/jindan
     depends_on:
       postgres:
         condition: service_healthy

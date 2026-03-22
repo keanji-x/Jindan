@@ -15,6 +15,11 @@ import { EventBus } from "../EventBus.js";
 import { MemoryStorage } from "../storage/MemoryStorage.js";
 import type { StorageBackend } from "../storage/StorageBackend.js";
 import { BeingLedger } from "./beings/BeingLedger.js";
+import {
+  buildContextSnapshot,
+  type ContextSnapshot,
+  type ThoughtRecord,
+} from "./ContextSnapshot.js";
 import { BALANCE } from "./config/balance.config.js";
 import { applyParams } from "./config/TunableParams.js";
 import { UNIVERSE } from "./config/universe.config.js";
@@ -25,7 +30,6 @@ import { registerBuiltinGraphs } from "./effects/graphs/index.js";
 import type { ActionOutcome, Effect } from "./effects/types.js";
 import { createEntity } from "./factory.js";
 import { Formatters } from "./formatters.js";
-
 import { RelationGraph } from "./RelationGraph.js";
 import { ParticleTransfer } from "./reactor/ParticleTransfer.js";
 import { Reactor } from "./reactor/Reactor.js";
@@ -166,11 +170,23 @@ export class World {
 
   // ── Event Recording ────────────────────────────────────
 
+  /** 重大事件类型 — 这些事件会被标记为长期记忆，不会被遗忘窗口淘汰 */
+  private static readonly MAJOR_EVENT_TYPES = new Set([
+    "entity_breakthrough",
+    "entity_died",
+    "entity_devoured",
+    "entity_reincarnated",
+    "entity_tomb",
+    "entity_sect_founded",
+    "entity_enslaved",
+  ]);
+
   /** 产生一笔新事件记录，写入事件图谱 */
   recordEvent(event: Omit<WorldEventRecord, "id">): WorldEventRecord {
     const fullEvent: WorldEventRecord = {
       ...event,
       id: nanoid(),
+      isMajor: event.isMajor ?? World.MAJOR_EVENT_TYPES.has(event.type),
     };
     this.eventGraph.append(fullEvent);
     return fullEvent;
@@ -206,7 +222,13 @@ export class World {
       tick: this._tick,
       daoTanks: { ...this.getDaoTanks() },
       entities: this.getAliveEntities(),
+      relations: this.relations.toJSON(),
     };
+  }
+
+  /** 为 LLM Agent 构建语义化上下文快照 */
+  getContextSnapshot(entityId: string, lastThoughts: ThoughtRecord[] = []): ContextSnapshot {
+    return buildContextSnapshot(this, entityId, lastThoughts);
   }
 
   // ── Entity Creation ──────────────────────────────────────

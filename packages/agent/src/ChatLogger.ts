@@ -4,8 +4,8 @@ import path from "node:path";
 export interface CycleRecord {
   cycle: number;
   status: string;
-  observe: Record<string, unknown>;
-  plan: Record<string, unknown>[];
+  observe: unknown;
+  plan: unknown[];
   llmInput: { system: string; user: string };
   llmOutput: {
     thought: string;

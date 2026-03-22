@@ -1,7 +1,7 @@
 // ============================================================
-// BotService — 用户账户 + 角色认证服务
+// BotService — 角色认证服务
 //
-// 管理用户注册/登录、角色创建/私钥认证、JWT session
+// 管理角色创建/私钥认证、JWT session、匿名夺舍
 // LLM 聊天已迁移至 Agent 端处理 (通过 AgentRelay 中继)
 // ============================================================
 
@@ -18,14 +18,12 @@ const JWT_EXPIRES_IN = "7d";
 
 // ── 邀请码保护 ────────────────────────────────────────────
 const INVITE_CODE = process.env.INVITE_CODE;
-if (!INVITE_CODE) {
-  console.warn("⚠️  INVITE_CODE 未设置，注册接口对所有人开放。生产环境请务必设置！");
-}
 
-// ── 简易频率限制 ──────────────────────────────────────────
-const _RATE_LIMIT_WINDOW_MS = 60_000; // 1 分钟
-const _RATE_LIMIT_MAX = 10; // 每分钟最多 10 次创建
-const _loginTimestamps: number[] = [];
+// ── 不活跃超时 (可通过环境变量配置) ────────────────────────
+const ATTACH_INACTIVITY_TIMEOUT_MS = parseInt(
+  process.env.ATTACH_INACTIVITY_TIMEOUT_MS ?? String(30 * 60 * 1000),
+  10,
+);
 
 // ── Session payload ───────────────────────────────────────
 interface SessionPayload {
@@ -45,6 +43,9 @@ export class BotService {
   readonly relay: AgentRelay;
   private readonly jwtSecret: string;
   private readonly attachTickets = new Map<string, { entityId: string; expiresAt: number }>();
+  /** 记录被夺舍实体的最后活跃时间 */
+  private readonly lastActivity = new Map<string, number>();
+  private inactivityTimer?: ReturnType<typeof setInterval>;
 
   constructor(world: World, storage: StorageBackend) {
     const secret = process.env.JWT_SECRET;
@@ -58,6 +59,17 @@ export class BotService {
     this.world = world;
     this.storage = storage;
     this.relay = new AgentRelay();
+
+    // 每 5 分钟检查不活跃的被控实体
+    this.inactivityTimer = setInterval(() => this.checkInactivity(), 5 * 60 * 1000);
+  }
+
+  /** 停止不活跃检查定时器 */
+  stopInactivityCheck(): void {
+    if (this.inactivityTimer) {
+      clearInterval(this.inactivityTimer);
+      this.inactivityTimer = undefined;
+    }
   }
 
   // ================================================================
@@ -198,6 +210,9 @@ export class BotService {
       this.storage.setUser(username, user);
     }
 
+    // 记录活跃时间
+    this.lastActivity.set(result.entityId, Date.now());
+
     return result;
   }
 
@@ -217,8 +232,56 @@ export class BotService {
 
     // 从存储和世界中彻底移除
     this.storage.removeEntity(entityId);
+    this.lastActivity.delete(entityId);
 
     return { success: true };
+  }
+
+  // ================================================================
+  // 0b. 匿名夺舍 (无需用户账户)
+  // ================================================================
+
+  /** 匿名夺舍 — 无需用户 token，任何人都可以直接夺舍 */
+  anonymousAttach(
+    entityId: string,
+    inviteCode?: string,
+  ): { entityId: string; secret: string; entity: Record<string, unknown> } {
+    const attachToken = this.generateAttachToken(entityId, inviteCode);
+    const result = this.attachEntity(entityId, attachToken);
+    this.lastActivity.set(result.entityId, Date.now());
+    return result;
+  }
+
+  // ================================================================
+  // 0c. 不活跃超时系统
+  // ================================================================
+
+  /** 记录实体的最后活跃时间 */
+  recordActivity(entityId: string): void {
+    if (this.storage.getSecret(entityId)) {
+      this.lastActivity.set(entityId, Date.now());
+    }
+  }
+
+  /** 检查并释放不活跃的被控实体 */
+  checkInactivity(): void {
+    const now = Date.now();
+    for (const [entityId, lastTime] of this.lastActivity.entries()) {
+      if (now - lastTime > ATTACH_INACTIVITY_TIMEOUT_MS) {
+        this.releaseEntity(entityId);
+      }
+    }
+  }
+
+  /** 释放被控实体 — 清除 secret 绑定，移除外部大脑标记 */
+  private releaseEntity(entityId: string): void {
+    console.log(`[Bot] 释放不活跃实体: ${entityId}`);
+    this.storage.removeEntity(entityId);
+    this.lastActivity.delete(entityId);
+    const entity = this.world.getEntity(entityId);
+    if (entity?.components.brain?.id === "external_llm") {
+      delete entity.components.brain;
+    }
   }
 
   // ================================================================
@@ -388,6 +451,9 @@ export class BotService {
       };
     }
 
+    // 记录活跃
+    this.recordActivity(entityId);
+
     // 通过 AgentRelay 入队
     return this.relay.enqueueChat(entityId, userMessage);
   }
@@ -398,6 +464,7 @@ export class BotService {
 
   performAction(token: string, action: string, targetId?: string): Record<string, unknown> {
     const session = this.verifyToken(token);
+    this.recordActivity(session.entityId);
     const result = this.world.performAction(session.entityId, action as ActionId, targetId);
     return result as unknown as Record<string, unknown>;
   }

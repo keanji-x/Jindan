@@ -10,45 +10,60 @@ dotenv.config({ path: path.resolve(__dirname, "../.env") });
 import { parseArgs } from "node:util";
 import type { ActionId } from "@jindan/core";
 import { ApiClient } from "./ApiClient.js";
+import { ChatLogger } from "./ChatLogger.js";
 import { ChatHandler } from "./chatHandler.js";
 import { LlmClient } from "./LlmClient.js";
+import { buildUserPrompt, SYSTEM_PROMPT } from "./prompt.js";
+import type { DecisionPacket, ThoughtRecord } from "./types.js";
+import { EMOTION_TAGS } from "./types.js";
 
 const { values } = parseArgs({
   allowPositionals: true,
   options: {
-    host: { type: "string", default: "http://localhost:3001" },
+    host: { type: "string", default: process.env.JINDAN_HOST || "http://localhost:3001" },
     id: { type: "string", short: "i" },
     name: { type: "string", short: "n" },
     species: { type: "string", short: "s", default: "human" },
-    key: { type: "string", short: "k" },
+    secret: { type: "string" }, // entity secret (JINDAN_SECRET)
+    "llm-key": { type: "string" }, // LLM API key
     url: { type: "string", short: "u" },
     model: { type: "string", short: "m" },
-    interval: { type: "string", default: "10000" }, // 10 seconds default
-    heartbeat: { type: "string", default: "1000" }, // 1 second heartbeat
+    interval: { type: "string", default: "10000" },
+    heartbeat: { type: "string", default: "1000" },
   },
 });
 
-const apiKey = values.key || process.env.OPENAI_API_KEY;
+const entitySecret = values.secret || process.env.JINDAN_SECRET || process.env.ENTITY_SECRET;
+const apiKey = values["llm-key"] || process.env.OPENAI_API_KEY;
 const baseUrl = values.url || process.env.OPENAI_BASE_URL || "https://api.openai.com/v1";
 const modelName = values.model || process.env.OPENAI_MODEL || "gpt-4o-mini";
 
 if (!apiKey) {
-  console.error("Error: Missing LLM API key. Pass via --key or OPENAI_API_KEY env var.");
+  console.error("Error: Missing LLM API key. Pass via --llm-key or OPENAI_API_KEY env var.");
   process.exit(1);
 }
 
-const api = new ApiClient(values.host!, values.key || process.env.ENTITY_SECRET);
+const api = new ApiClient(values.host!, entitySecret);
 const llm = new LlmClient(apiKey, baseUrl, modelName);
-const chatHandler = new ChatHandler(api, llm);
 
 const sleepMs = parseInt(values.interval!, 10) || 10000;
 const heartbeatMs = parseInt(values.heartbeat!, 10) || 1000;
 
+// ── ThoughtBuffer — 工作记忆环形缓冲（OODA + Chat 共享） ──
+const MAX_THOUGHTS = 5;
+const thoughtBuffer: ThoughtRecord[] = [];
+
+function pushThought(thought: ThoughtRecord) {
+  thoughtBuffer.push(thought);
+  if (thoughtBuffer.length > MAX_THOUGHTS) thoughtBuffer.shift();
+}
+
+// ChatHandler 共享 thoughtBuffer 引用
+const chatHandler = new ChatHandler(api, llm, thoughtBuffer);
+
 async function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
-
-import { generateUserPrompt, SYSTEM_PROMPT } from "./prompt.js";
 
 const EPITAPH_PROMPT = `
 你已死亡，灵魂飘荡在天地之间。
@@ -66,7 +81,32 @@ const EPITAPH_PROMPT = `
 }
 `;
 
-import { ChatLogger } from "./ChatLogger.js";
+// ── DecisionPacket 解析 ──────────────────────────────────
+
+function parseDecision(raw: string): DecisionPacket {
+  const parsed = JSON.parse(raw);
+
+  // 验证 emotion
+  const emotion = (EMOTION_TAGS as readonly string[]).includes(parsed.emotion)
+    ? parsed.emotion
+    : "calm";
+
+  // 验证 plan
+  const plan = Array.isArray(parsed.plan)
+    ? parsed.plan.map((step: Record<string, unknown>) => ({
+        action: String(step.action ?? ""),
+        targetId: step.targetId ? String(step.targetId) : undefined,
+        reason: String(step.reason ?? ""),
+      }))
+    : [];
+
+  return {
+    innerVoice: String(parsed.innerVoice ?? parsed.thought ?? ""),
+    emotion,
+    shortTermGoal: String(parsed.shortTermGoal ?? ""),
+    plan,
+  };
+}
 
 // ============================================================
 // 心跳循环 (独立 1s 周期) — 保持在线 + Chat 插队
@@ -195,6 +235,7 @@ ${lifeStatus.life.article || "（无前世记忆，这是第一世）"}
             // entityId 不变，心跳无需重启
             logger = new ChatLogger(id, path.resolve(__dirname, "../../logs"));
             chatHandler.clearHistory(id);
+            thoughtBuffer.length = 0; // 清空工作记忆
             cycle = 0;
             console.log(`[AgentLoop] 🌱 Reincarnated! Same entityId: ${id}. Continuing loop...`);
             await sleep(sleepMs);
@@ -213,19 +254,17 @@ ${lifeStatus.life.article || "（无前世记忆，这是第一世）"}
       }
 
       // ── 正常 OODA 循环 (存活状态) ───────────────────────
-      console.log(`[AgentLoop] -> Observing world...`);
-      const observeData = await api.getObserve(id);
+      console.log(`[AgentLoop] -> Fetching context snapshot...`);
+      const snapshot = await api.getSnapshot(id, thoughtBuffer);
 
-      console.log(`[AgentLoop] -> Planning...`);
-      const planData = await api.getPlan(id);
-
-      if (planData.length === 0) {
+      const possibleActions = snapshot.options.actions.filter((a) => a.possible);
+      if (possibleActions.length === 0) {
         console.log(`[AgentLoop] No actions available, sleeping...`);
         logger.push({
           cycle,
           status: lifeStatus.status,
-          observe: observeData,
-          plan: planData,
+          observe: snapshot,
+          plan: [],
           llmInput: { system: "", user: "" },
           llmOutput: { thought: "No possible actions", action: "rest", raw: "" },
           actionResult: { success: false, error: "No actions" },
@@ -235,48 +274,77 @@ ${lifeStatus.life.article || "（无前世记忆，这是第一世）"}
       }
 
       console.log(`[AgentLoop] -> Pondering via LLM (${modelName})...`);
-      const userPrompt = generateUserPrompt(observeData, planData);
-
+      const userPrompt = buildUserPrompt(snapshot);
       const responseText = await llm.complete(SYSTEM_PROMPT, userPrompt);
-      const parsed = JSON.parse(responseText);
+      const decision = parseDecision(responseText);
 
-      const { thought, action, targetId } = parsed;
-      console.log(`\n[AgentLog] Thought: ${thought}`);
-      console.log(`[AgentLog] Action: ${action} ${targetId ? `on ${targetId}` : ""}`);
+      console.log(`\n[AgentLog] 🧠 InnerVoice: ${decision.innerVoice}`);
+      console.log(`[AgentLog] 😊 Emotion: ${decision.emotion}`);
+      console.log(`[AgentLog] 🎯 ShortTermGoal: ${decision.shortTermGoal}`);
+      console.log(
+        `[AgentLog] 📋 Plan: ${decision.plan.map((s) => `${s.action}${s.targetId ? `→${s.targetId}` : ""}`).join(" → ")}`,
+      );
 
-      if (thought) {
-        await api.postReport(id, thought).catch((err) => {
+      // 上报内心独白
+      if (decision.innerVoice) {
+        await api.postReport(id, decision.innerVoice).catch((err: Error) => {
           console.warn(`[AgentLoop] Failed to post report:`, err.message);
         });
       }
 
-      let actionResult: { success: boolean; error?: string; result?: unknown } = {
-        success: false,
-        error: "Not run",
-      };
-      if (action) {
+      // ── 串行执行 Plan ──────────────────────────────────
+      const outcomes: Array<{ action: string; success: boolean }> = [];
+
+      for (const step of decision.plan) {
+        if (!step.action) continue;
         try {
-          const result = await api.performAction(id, action as ActionId, targetId);
-          console.log(`[AgentLoop] Action Result:`, JSON.stringify(result));
-          actionResult = {
-            success: Boolean(result.success),
-            error: result.error as string | undefined,
-            result: result.result,
-          };
+          console.log(
+            `[AgentLoop] -> Executing: ${step.action}${step.targetId ? ` → ${step.targetId}` : ""} (${step.reason})`,
+          );
+          const result = await api.performAction(id, step.action as ActionId, step.targetId);
+          const success = Boolean(result.success);
+          outcomes.push({ action: step.action, success });
+          console.log(
+            `[AgentLoop]    ${success ? "✅" : "❌"} ${step.action}: ${success ? "成功" : (result.error ?? "失败")}`,
+          );
+          if (!success) {
+            console.log(`[AgentLoop]    Plan 中止（行动失败）`);
+            break;
+          }
         } catch (e) {
-          actionResult = { success: false, error: e instanceof Error ? e.message : String(e) };
-          console.error(`[AgentLoop] Action failed:`, actionResult.error);
+          outcomes.push({ action: step.action, success: false });
+          console.error(
+            `[AgentLoop]    ❌ ${step.action} 异常:`,
+            e instanceof Error ? e.message : String(e),
+          );
+          break;
         }
       }
+
+      // ── 存入工作记忆 ──────────────────────────────────
+      pushThought({
+        tick: snapshot.perception.worldTick,
+        innerVoice: decision.innerVoice,
+        plan: decision.plan,
+        outcomes,
+      });
 
       logger.push({
         cycle,
         status: lifeStatus.status,
-        observe: observeData,
-        plan: planData,
+        observe: snapshot,
+        plan: decision.plan,
         llmInput: { system: SYSTEM_PROMPT, user: userPrompt },
-        llmOutput: { thought, action, targetId, raw: responseText },
-        actionResult,
+        llmOutput: {
+          thought: decision.innerVoice,
+          action: decision.plan[0]?.action ?? "",
+          targetId: decision.plan[0]?.targetId,
+          raw: responseText,
+        },
+        actionResult: {
+          success: outcomes.length > 0 && outcomes.every((o) => o.success),
+          result: outcomes,
+        },
       });
     } catch (err) {
       console.error(
@@ -295,17 +363,16 @@ ${lifeStatus.life.article || "（无前世记忆，这是第一世）"}
 
 async function main() {
   try {
-    const secret = values.key || process.env.ENTITY_SECRET;
     const legacyId = values.id || process.env.AGENT_ID;
     const name = values.name ?? "无名";
     const species = values.species ?? "human";
 
     let id: string;
 
-    if (secret) {
+    if (entitySecret) {
       // 用私钥从服务器解析 entityId
       console.log(`[AgentInit] Resolving entity from secret key...`);
-      const result = await api.resolveSecret(secret);
+      const result = await api.resolveSecret(entitySecret);
       id = result.entityId;
       console.log(`[AgentInit] Attached to entity: ${id}`);
     } else if (legacyId) {
@@ -314,7 +381,7 @@ async function main() {
       id = legacyId;
     } else {
       throw new Error(
-        "You must provide a --key (entity secret) or --id (entity ID).\n" +
+        "You must provide a --secret (entity secret) or --id (entity ID).\n" +
           "Create a character at the web UI first, then use the secret key here.",
       );
     }

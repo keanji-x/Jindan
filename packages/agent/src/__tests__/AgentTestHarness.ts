@@ -1,7 +1,7 @@
 // ============================================================
 // AgentTestHarness — offline agent loop testing
 //
-// Records full chat flow: observe → plan → LLM → action → state
+// Records full chat flow: snapshot → LLM → multi-action → state
 // Two LLM modes: Scripted (deterministic) and Heuristic (rules)
 // ============================================================
 
@@ -88,7 +88,22 @@ export class ChatLog {
   }
 }
 
-// ── Mock LLM ────────────────────────────────────────────────
+// ── DecisionPacket (mirrors agent/src/types.ts) ─────────────
+
+export interface PlanStep {
+  action: string;
+  targetId?: string;
+  reason: string;
+}
+
+export interface DecisionPacket {
+  innerVoice: string;
+  emotion: string;
+  shortTermGoal: string;
+  plan: PlanStep[];
+}
+
+// ── Legacy LlmDecision (still supported for backward compat) ─
 
 export interface LlmDecision {
   thought: string;
@@ -96,36 +111,56 @@ export interface LlmDecision {
   targetId?: string;
 }
 
+/** Convert legacy single-action to DecisionPacket */
+function legacyToPacket(d: LlmDecision): DecisionPacket {
+  return {
+    innerVoice: d.thought,
+    emotion: "calm",
+    shortTermGoal: "",
+    plan: [{ action: d.action, targetId: d.targetId, reason: d.thought }],
+  };
+}
+
+// ── Mock LLM ────────────────────────────────────────────────
+
 /** Scripted mock: returns pre-defined responses in order */
 export class ScriptedLlm {
   private idx = 0;
-  constructor(private readonly script: LlmDecision[]) {}
+  constructor(private readonly script: (LlmDecision | DecisionPacket)[]) {}
 
-  decide(_observe: CycleRecord["observe"], _plan: AvailableAction[]): LlmDecision {
+  decide(_observe: CycleRecord["observe"], _plan: AvailableAction[]): DecisionPacket {
     if (this.idx >= this.script.length) {
-      return { thought: "脚本已耗尽，休息", action: "rest" };
+      return legacyToPacket({ thought: "脚本已耗尽，休息", action: "rest" });
     }
-    return this.script[this.idx++]!;
+    const item = this.script[this.idx++]!;
+    // Detect if legacy format (has 'thought' + 'action') or new format (has 'plan')
+    if ("plan" in item && Array.isArray(item.plan)) {
+      return item as DecisionPacket;
+    }
+    return legacyToPacket(item as LlmDecision);
   }
 }
 
 /** Heuristic mock: uses simple rules to make decisions (like a real AI would) */
 export class HeuristicLlm {
-  decide(observe: CycleRecord["observe"], plan: AvailableAction[]): LlmDecision {
+  decide(observe: CycleRecord["observe"], plan: AvailableAction[]): DecisionPacket {
     const possible = plan.filter((a) => a.possible);
     if (possible.length === 0) {
-      return { thought: "没有可执行的行动，只能休息", action: "rest" };
+      return legacyToPacket({ thought: "没有可执行的行动，只能休息", action: "rest" });
     }
 
     const { qiRatio } = observe;
+    const steps: PlanStep[] = [];
 
     // Priority 1: Breakthrough if qi >= 90%
     if (qiRatio >= 0.9) {
       const bt = possible.find((a) => a.action === "breakthrough");
       if (bt) {
         return {
-          thought: `灵气充盈度${Math.floor(qiRatio * 100)}%，尝试突破`,
-          action: "breakthrough",
+          innerVoice: `灵气充盈度${Math.floor(qiRatio * 100)}%，尝试突破`,
+          emotion: "eager",
+          shortTermGoal: "突破境界",
+          plan: [{ action: "breakthrough", reason: "灵气充盈" }],
         };
       }
     }
@@ -136,11 +171,11 @@ export class HeuristicLlm {
         (a) => a.action === "devour" && a.description.includes("plant"),
       );
       if (devourPlant) {
-        return {
-          thought: `灵气仅${Math.floor(qiRatio * 100)}%，吞噬灵植补充灵气`,
+        steps.push({
           action: "devour",
           targetId: devourPlant.targetId,
-        };
+          reason: "吞噬灵植补充灵气",
+        });
       }
     }
 
@@ -149,14 +184,20 @@ export class HeuristicLlm {
       (a) => a.action === "meditate" || a.action === "moonlight" || a.action === "photosynth",
     );
     if (meditate) {
-      return {
-        thought: `灵气${Math.floor(qiRatio * 100)}%，打坐吸纳灵气`,
-        action: meditate.action,
-      };
+      steps.push({ action: meditate.action, reason: "打坐吸纳灵气" });
     }
 
-    // Fallback: rest
-    return { thought: "无最优策略，暂且休息", action: "rest" };
+    // Fallback: rest if no steps planned
+    if (steps.length === 0) {
+      steps.push({ action: "rest", reason: "暂且休息" });
+    }
+
+    return {
+      innerVoice: `灵气${Math.floor(qiRatio * 100)}%，${steps[0]!.reason}`,
+      emotion: qiRatio < 0.3 ? "fearful" : "calm",
+      shortTermGoal: qiRatio < 0.5 ? "补充灵气" : "稳步修炼",
+      plan: steps,
+    };
   }
 }
 
@@ -225,7 +266,7 @@ export class AgentHarness {
     // ── Plan ──
     const plan = this.world.getAvailableActions(this._entityId);
 
-    // ── LLM ──
+    // ── LLM → DecisionPacket ──
     const systemPrompt = "[AgentTestHarness] Mock System Prompt";
     const userPrompt = `Observe: ${JSON.stringify(observe)}\nPlan: ${JSON.stringify(
       plan.map((a) => ({
@@ -239,22 +280,24 @@ export class AgentHarness {
     const decision = this.llm.decide(observe, plan);
     const llmRaw = JSON.stringify(decision);
 
-    // ── Act ──
-    let actionResult: CycleRecord["actionResult"];
-    if (decision.action && decision.action !== "none") {
-      const res = this.world.performAction(
-        this._entityId,
-        decision.action as ActionId,
-        decision.targetId,
-      );
-      actionResult = {
+    // ── Act: execute plan steps serially ──
+    const outcomes: Array<{ action: string; success: boolean; error?: string; result?: unknown }> =
+      [];
+
+    for (const step of decision.plan) {
+      if (!step.action || step.action === "none") continue;
+      const res = this.world.performAction(this._entityId, step.action as ActionId, step.targetId);
+      outcomes.push({
+        action: step.action,
         success: res.success,
         error: res.error,
         result: res.result,
-      };
-    } else {
-      actionResult = { success: false, error: "No action decided" };
+      });
+      if (!res.success) break; // abort plan on failure
     }
+
+    const overallSuccess = outcomes.length > 0 && outcomes.every((o) => o.success);
+    const primaryAction = decision.plan[0];
 
     // ── Post-state ──
     const postEntity = this.world.getEntity(this._entityId);
@@ -272,7 +315,7 @@ export class AgentHarness {
       entityStatus: postEntity?.status ?? "unknown",
     };
 
-    // ── Record ──
+    // ── Record (backward compatible: first action in plan as primary) ──
     this.log.push({
       cycle: cycleNum,
       status: entity.status,
@@ -280,12 +323,16 @@ export class AgentHarness {
       plan,
       llmInput: { system: systemPrompt, user: userPrompt },
       llmOutput: {
-        thought: decision.thought,
-        action: decision.action,
-        targetId: decision.targetId,
+        thought: decision.innerVoice,
+        action: primaryAction?.action ?? "none",
+        targetId: primaryAction?.targetId,
         raw: llmRaw,
       },
-      actionResult,
+      actionResult: {
+        success: overallSuccess,
+        error: outcomes.find((o) => !o.success)?.error,
+        result: outcomes,
+      },
       postState,
     });
 

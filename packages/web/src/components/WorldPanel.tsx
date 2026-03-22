@@ -5,10 +5,12 @@ import {
   type GraveyardLife,
   getEntities,
   getGraveyard,
+  getRelations,
   getWorldStatus,
+  type RelationEdge,
   type WorldStatus,
 } from "../api/client";
-import { useAuth } from "../context/AuthContext";
+import RelationGraph from "./RelationGraph";
 
 const REALM_NAMES = [
   "凡人",
@@ -58,12 +60,13 @@ interface LogEntry {
 }
 
 export default function WorldPanel({ activeEntityId }: Props) {
-  const { token } = useAuth();
   const [world, setWorld] = useState<WorldStatus | null>(null);
   const [entities, setEntities] = useState<EntityData[]>([]);
+  const [relations, setRelations] = useState<Record<string, RelationEdge>>({});
   const [graveyard, setGraveyard] = useState<GraveyardGroup[]>([]);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [logTab, setLogTab] = useState<"global" | "personal">("global");
+  const [viewMode, setViewMode] = useState<"list" | "graph">("list");
   const wsRef = useRef<WebSocket | null>(null);
 
   // Fetch initial data
@@ -73,6 +76,9 @@ export default function WorldPanel({ activeEntityId }: Props) {
       .catch(() => {});
     getEntities()
       .then(setEntities)
+      .catch(() => {});
+    getRelations()
+      .then(setRelations)
       .catch(() => {});
     getGraveyard()
       .then(setGraveyard)
@@ -89,13 +95,10 @@ export default function WorldPanel({ activeEntityId }: Props) {
     return () => clearInterval(timer);
   }, []);
 
-  // WebSocket for live updates (requires JWT token)
+  // WebSocket for live updates (anonymous — no token needed)
   useEffect(() => {
-    if (!token) return; // not logged in, skip WS
     const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const ws = new WebSocket(
-      `${proto}//${window.location.host}/api?token=${encodeURIComponent(token)}`,
-    );
+    const ws = new WebSocket(`${proto}//${window.location.host}/api`);
     wsRef.current = ws;
 
     ws.onmessage = (event) => {
@@ -104,10 +107,15 @@ export default function WorldPanel({ activeEntityId }: Props) {
           type?: string;
           message?: string;
           tick?: number;
-          data?: { entities?: EntityData[]; entity?: { id?: string } };
+          data?: {
+            entities?: EntityData[];
+            relations?: Record<string, RelationEdge>;
+            entity?: { id?: string };
+          };
         };
         if (data.type === "world_snapshot" || data.type === "tick_complete") {
           if (data.data?.entities) setEntities(data.data.entities);
+          if (data.data?.relations) setRelations(data.data.relations);
           setWorld((prev) => ({ ...prev, ...data.data }) as WorldStatus);
         } else if (data.type && data.message) {
           // Event log messages
@@ -133,13 +141,13 @@ export default function WorldPanel({ activeEntityId }: Props) {
     };
 
     return () => ws.close();
-  }, [token]);
+  }, []);
 
   // ── Extract world data (matching original web logic) ────
   const tick = world?.tick ?? 0;
-  const ambientPool = world?.ambientPool;
-  const ambientQi = ambientPool?.pools?.ql ?? 0;
-  const shaQi = Math.abs(ambientPool?.pools?.qs ?? 0);
+  const daoTanks = world?.daoTanks;
+  const ambientQi = daoTanks?.ql ?? 0;
+  const shaQi = Math.abs(daoTanks?.qs ?? 0);
 
   // Entity Qi = sum of all alive entities' core particle tanks
   let entityQi = 0;
@@ -158,10 +166,12 @@ export default function WorldPanel({ activeEntityId }: Props) {
   const totalInner = lingQi + shaQi || 1; // inner ring total
   const popTotal = entities.filter((e) => e.status === "alive").length;
 
-  // Sort entities by power
+  // Sort entities by realm (include lingering for 生灵榜)
   const sorted = [...entities]
-    .filter((e) => e.status === "alive")
-    .sort((a, b) => (b.components?.combat?.power ?? 0) - (a.components?.combat?.power ?? 0));
+    .filter((e) => e.status === "alive" || e.status === "lingering")
+    .sort(
+      (a, b) => (b.components?.cultivation?.realm ?? 0) - (a.components?.cultivation?.realm ?? 0),
+    );
 
   // Focus entity
   const focusEntity = activeEntityId
@@ -171,7 +181,7 @@ export default function WorldPanel({ activeEntityId }: Props) {
   const focusQi = focusEntity?.components?.tank?.tanks?.[coreParticle] ?? 0;
   const focusMaxQi = focusEntity?.components?.tank?.maxTanks?.[coreParticle] ?? 1;
   const focusQiPct = focusMaxQi > 0 ? Math.round((focusQi / focusMaxQi) * 100) : 0;
-  const focusPower = focusEntity?.components?.combat?.power ?? 0;
+
   const focusRealm = focusEntity?.components?.cultivation?.realm ?? 0;
 
   // Filter logs for personal tab
@@ -242,7 +252,7 @@ export default function WorldPanel({ activeEntityId }: Props) {
         </div>
       </div>
 
-      {/* ═══════ TOP: Qi Pool + Leaderboard ═══════ */}
+      {/* ═══════ TOP: Qi Pool + 生灵榜/关系图 ═══════ */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
         {/* Qi Pool Panel */}
         <div className="glass-panel">
@@ -356,59 +366,130 @@ export default function WorldPanel({ activeEntityId }: Props) {
           </div>
         </div>
 
-        {/* Leaderboard Panel */}
+        {/* 生灵榜 / 关系图 — toggle */}
         <div className="glass-panel">
-          <h2 className="section-title">天骄榜 (Top Cultivators)</h2>
-          <div className="grid grid-cols-[2fr_1.5fr_1fr] px-3 pb-2 text-[0.7rem] text-slate-500 uppercase tracking-wider">
-            <span>修仙者</span>
-            <span>境界</span>
-            <span className="text-right">战力</span>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="section-title !mb-0">{viewMode === "list" ? "生灵榜" : "因缘图谱"}</h2>
+            <button
+              type="button"
+              onClick={() => setViewMode((m) => (m === "list" ? "graph" : "list"))}
+              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-white/[0.1] text-slate-400 hover:text-qi hover:border-qi/40 transition-all bg-white/[0.02] hover:bg-qi/[0.05]"
+            >
+              {viewMode === "list" ? (
+                <>
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <title>切换到因缘图谱</title>
+                    <circle cx="6" cy="6" r="3" />
+                    <circle cx="18" cy="18" r="3" />
+                    <circle cx="18" cy="6" r="3" />
+                    <line x1="8.5" y1="7.5" x2="15.5" y2="16.5" />
+                    <line x1="8.5" y1="6" x2="15" y2="6" />
+                  </svg>
+                  因缘图谱
+                </>
+              ) : (
+                <>
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <title>切换到生灵榜</title>
+                    <line x1="8" y1="6" x2="21" y2="6" />
+                    <line x1="8" y1="12" x2="21" y2="12" />
+                    <line x1="8" y1="18" x2="21" y2="18" />
+                    <circle cx="4" cy="6" r="1" />
+                    <circle cx="4" cy="12" r="1" />
+                    <circle cx="4" cy="18" r="1" />
+                  </svg>
+                  生灵榜
+                </>
+              )}
+            </button>
           </div>
-          <div className="flex-1 overflow-y-auto space-y-1.5 pr-1 max-h-[300px]">
-            {sorted.slice(0, 15).map((e, i) => {
-              const isMe = e.id === activeEntityId;
-              const realm = e.components?.cultivation?.realm ?? 0;
-              const power = e.components?.combat?.power ?? 0;
-              const species = e.species || "human";
-              return (
-                <div
-                  key={e.id}
-                  className={`w-full grid grid-cols-[2fr_1.5fr_1fr] items-center px-3 py-2 rounded-lg transition-all text-left ${
-                    isMe
-                      ? "bg-qi/[0.08] border border-qi/20 shadow-[inset_2px_0_0_#38bdf8]"
-                      : "bg-white/[0.02] border border-white/[0.05] hover:bg-sky-500/[0.08] hover:border-sky-500/20 hover:translate-x-1"
-                  }`}
-                >
-                  <span className="flex items-center gap-2 font-bold text-slate-200 text-sm">
-                    <span
-                      className={`inline-flex items-center justify-center w-5 h-5 rounded text-[0.65rem] font-mono ${
-                        i === 0
-                          ? "bg-gradient-to-br from-amber-500 to-amber-700 text-white shadow-[0_0_8px_rgba(245,158,11,0.5)]"
-                          : i === 1
-                            ? "bg-gradient-to-br from-slate-400 to-slate-600 text-white"
-                            : i === 2
-                              ? "bg-gradient-to-br from-amber-700 to-amber-900 text-white"
-                              : "bg-white/10"
+
+          {viewMode === "list" ? (
+            /* ─── List View (生灵榜) ─── */
+            <>
+              <div className="grid grid-cols-[2fr_1fr] px-3 pb-2 text-[0.7rem] text-slate-500 uppercase tracking-wider">
+                <span>修仙者</span>
+                <span className="text-right">境界</span>
+              </div>
+              <div className="flex-1 overflow-y-auto space-y-1.5 pr-1 max-h-[300px]">
+                {sorted.slice(0, 15).map((e, i) => {
+                  const isMe = e.id === activeEntityId;
+                  const realm = e.components?.cultivation?.realm ?? 0;
+                  const species = e.species || "human";
+                  const isGhost = e.status === "lingering";
+                  return (
+                    <div
+                      key={e.id}
+                      className={`w-full grid grid-cols-[2fr_1fr] items-center px-3 py-2 rounded-lg transition-all text-left ${
+                        isMe
+                          ? "bg-qi/[0.08] border border-qi/20 shadow-[inset_2px_0_0_#38bdf8]"
+                          : isGhost
+                            ? "bg-purple-500/[0.04] border border-purple-500/10 opacity-70"
+                            : "bg-white/[0.02] border border-white/[0.05] hover:bg-sky-500/[0.08] hover:border-sky-500/20 hover:translate-x-1"
                       }`}
                     >
-                      {i + 1}
-                    </span>
-                    <span>{SPECIES_ICONS[species] || "🧔"}</span>
-                    <span className={`truncate ${isMe ? "text-qi font-bold" : ""}`}>{e.name}</span>
-                  </span>
-                  <span className="text-qi text-xs">{REALM_NAMES[realm]}</span>
-                  <span className="text-right text-combat font-title font-bold text-sm">
-                    {formatNum(power)}
-                  </span>
-                </div>
-              );
-            })}
-            {entities.length === 0 && (
-              <div className="text-center text-slate-500 italic py-8 text-sm">
-                天地初开，暂无天骄
+                      <span className="flex items-center gap-2 font-bold text-slate-200 text-sm">
+                        <span
+                          className={`inline-flex items-center justify-center w-5 h-5 rounded text-[0.65rem] font-mono ${
+                            i === 0
+                              ? "bg-gradient-to-br from-amber-500 to-amber-700 text-white shadow-[0_0_8px_rgba(245,158,11,0.5)]"
+                              : i === 1
+                                ? "bg-gradient-to-br from-slate-400 to-slate-600 text-white"
+                                : i === 2
+                                  ? "bg-gradient-to-br from-amber-700 to-amber-900 text-white"
+                                  : "bg-white/10"
+                          }`}
+                        >
+                          {i + 1}
+                        </span>
+                        <span>{isGhost ? "👻" : SPECIES_ICONS[species] || "🧔"}</span>
+                        <span
+                          className={`truncate ${isMe ? "text-qi font-bold" : isGhost ? "text-purple-300" : ""}`}
+                        >
+                          {e.name}
+                        </span>
+                      </span>
+                      <span
+                        className={`text-xs text-right ${isGhost ? "text-purple-400" : "text-qi"}`}
+                      >
+                        {isGhost ? "游魂" : REALM_NAMES[realm]}
+                      </span>
+                    </div>
+                  );
+                })}
+                {entities.length === 0 && (
+                  <div className="text-center text-slate-500 italic py-8 text-sm">
+                    天地初开，暂无生灵
+                  </div>
+                )}
               </div>
-            )}
-          </div>
+            </>
+          ) : (
+            /* ─── Graph View (因缘图谱) ─── */
+            <RelationGraph
+              entities={entities}
+              relations={relations}
+              activeEntityId={activeEntityId}
+            />
+          )}
         </div>
       </div>
 
@@ -492,10 +573,6 @@ export default function WorldPanel({ activeEntityId }: Props) {
 
               {/* Details */}
               <div className="w-full bg-black/20 rounded-xl p-3 border border-white/[0.03] space-y-2">
-                <div className="flex justify-between items-center text-sm py-1 border-b border-dashed border-white/[0.05]">
-                  <span className="text-slate-400">战力</span>
-                  <span className="font-bold text-combat">{formatNum(focusPower)}</span>
-                </div>
                 <div className="flex justify-between items-center text-sm py-1">
                   <span className="text-slate-400">境界</span>
                   <span className="font-bold text-slate-200">{REALM_NAMES[focusRealm]}</span>
@@ -505,7 +582,7 @@ export default function WorldPanel({ activeEntityId }: Props) {
           ) : (
             <div className="flex-1 flex items-center justify-center">
               <p className="text-sm text-slate-500 italic">
-                点击天骄榜中一位修仙者，以内观其金丹。
+                点击生灵榜中一位修仙者，以内观其金丹。
               </p>
             </div>
           )}
@@ -554,7 +631,7 @@ export default function WorldPanel({ activeEntityId }: Props) {
             ) : (
               <div className="flex items-center justify-center h-full text-sm text-slate-500 italic py-8">
                 {logTab === "personal"
-                  ? "请先在天骄榜点击一名修仙者，以探寻其仙缘轨迹。"
+                  ? "请先在生灵榜点击一名修仙者，以探寻其仙缘轨迹。"
                   : "等待天地异象..."}
               </div>
             )}
