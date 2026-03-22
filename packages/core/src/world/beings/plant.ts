@@ -1,5 +1,4 @@
 import type { ReactorTemplate } from "../config/types.js";
-import { CHAT, COURT, MATE, TRAVEL, TREAT } from "../systems/InteractionSystem.js";
 import { BREAKTHROUGH, PHOTOSYNTH, REST, SPAWN_OFFSPRING } from "../systems/SingleEntitySystem.js";
 
 export const PlantReactor: ReactorTemplate = {
@@ -15,12 +14,7 @@ export const PlantReactor: ReactorTemplate = {
     { ...PHOTOSYNTH, absorbRate: { base: 45, perRealm: 15 } },
     BREAKTHROUGH,
     REST,
-    CHAT,
-    COURT,
-    MATE,
     SPAWN_OFFSPRING,
-    TREAT,
-    TRAVEL,
   ],
   npcNames: ["万年灵芝", "血藤", "幽冥花", "碧玉竹", "九转莲"],
   npcBrainId: "heuristic_optimizer",
