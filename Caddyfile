@@ -1,13 +1,15 @@
 # ============================================================
-# Caddy 反向代理配置
+# Caddy 反向代理配置 (Cloudflare Full SSL)
 #
-# Cloudflare 代理模式 (推荐):
-#   SITE_ADDRESS=:80  → Caddy 仅做 HTTP 反代, SSL 由 CF 终结
-#
-# 自签 HTTPS 模式 (无 CF):
-#   SITE_ADDRESS=yourdomain.com → Caddy 自动 Let's Encrypt
+# Caddy 在 443 上用自签证书提供 HTTPS,
+# Cloudflare 以 "Full" 模式连接到此端口。
 # ============================================================
 
-{$SITE_ADDRESS::80} {
-    reverse_proxy core:{$PORT:3001}
+:443 {
+    tls internal
+    reverse_proxy core:3001
+}
+
+:80 {
+    redir https://{host}{uri} permanent
 }
