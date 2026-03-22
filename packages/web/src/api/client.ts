@@ -99,7 +99,6 @@ export interface EntityComponents {
     realm?: number;
     currentQi?: number;
   };
-
 }
 
 export interface EntityData {

@@ -169,7 +169,9 @@ export default function WorldPanel({ activeEntityId }: Props) {
   // Sort entities by realm (include lingering for 生灵榜)
   const sorted = [...entities]
     .filter((e) => e.status === "alive" || e.status === "lingering")
-    .sort((a, b) => (b.components?.cultivation?.realm ?? 0) - (a.components?.cultivation?.realm ?? 0));
+    .sort(
+      (a, b) => (b.components?.cultivation?.realm ?? 0) - (a.components?.cultivation?.realm ?? 0),
+    );
 
   // Focus entity
   const focusEntity = activeEntityId
@@ -465,7 +467,9 @@ export default function WorldPanel({ activeEntityId }: Props) {
                           {e.name}
                         </span>
                       </span>
-                      <span className={`text-xs text-right ${isGhost ? "text-purple-400" : "text-qi"}`}>
+                      <span
+                        className={`text-xs text-right ${isGhost ? "text-purple-400" : "text-qi"}`}
+                      >
                         {isGhost ? "游魂" : REALM_NAMES[realm]}
                       </span>
                     </div>

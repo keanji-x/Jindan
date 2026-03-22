@@ -45,10 +45,9 @@ export const doMate: ActionResolver = (entity, _actionId, context) => {
 
   const entityName = entity.name || entity.id;
   const targetName = context.target.name || context.target.id;
-  const childName =
-    reactor.npcNames?.length
-      ? reactor.npcNames[Math.floor(Math.random() * reactor.npcNames.length)]!
-      : entityName;
+  const childName = reactor.npcNames?.length
+    ? reactor.npcNames[Math.floor(Math.random() * reactor.npcNames.length)]!
+    : entityName;
 
   const effects: Effect[] = [
     // Deduct particles from both parents

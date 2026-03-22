@@ -9,7 +9,6 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { ContextSnapshot } from "./snapshotTypes.js";
-import type { ThoughtRecord } from "./types.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const skillPath = path.resolve(__dirname, "../../../.agents/skills/play-jindan/SKILL.md");
