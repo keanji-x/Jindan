@@ -13,5 +13,4 @@ export const SectReactor: ReactorTemplate = {
   baseDrainRate: 10,
   ownPolarity: { ql: 1.0, qs: 0.0 },
   actions: [MEDITATE, DEVOUR, REST, CHAT, ACQUIRE, RECRUIT],
-  ambientCapContribution: 5000,
 };

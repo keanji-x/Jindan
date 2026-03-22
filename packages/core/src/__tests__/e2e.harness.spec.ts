@@ -27,7 +27,7 @@ describe("World E2E — Fluent Harness", () => {
 
       expect(snap.tick).toBe(0);
       // Ambient pool starts with initial totalParticles (default 1000)
-      expect(snap.ambientPool.pools.ql).toBeGreaterThanOrEqual(1000);
+      expect(snap.daoTanks.ql).toBeGreaterThanOrEqual(1000);
 
       // After a few ticks, SpawnPool should organically generate entities
       harness.createHuman("触发者"); // need a player to drive ticks
@@ -96,7 +96,7 @@ describe("World E2E — Fluent Harness", () => {
       harness = world();
       const human = harness.createHuman("打坐者");
       const snapBefore = harness.snapshot();
-      const _ambientBefore = snapBefore.ambientPool.pools.ql ?? 0;
+      const _ambientBefore = snapBefore.daoTanks.ql ?? 0;
 
       const result = harness.act(human.id, "meditate");
       expect(result.success).toBe(true);
@@ -142,7 +142,7 @@ describe("World E2E — Fluent Harness", () => {
       human.components.tank!.tanks.ql = 500;
       // Lower ambient so density < 1, which enables dissipation to fire
       // (when density = 1, dissipation = exp(k*0) - 1 = 0)
-      harness.world.qiPool.state.pools.ql = 50;
+      harness.world.getDaoTanks().ql = 50;
 
       harness.run(5).check((h) => h.assertEventEmitted("entity_drained"));
     });
@@ -177,7 +177,7 @@ describe("World E2E — Fluent Harness", () => {
       const snap = harness.snapshot();
       expect(snap.entities).toBeDefined();
       expect(Array.isArray(snap.entities)).toBe(true);
-      expect(snap.ambientPool).toBeDefined();
+      expect(snap.daoTanks).toBeDefined();
     });
   });
 

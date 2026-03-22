@@ -64,7 +64,11 @@ export const doBreakthrough: ActionResolver = (entity, _actionId, context) => {
     return {
       status: "failure",
       reason: "突破失败，根基动摇",
-      failureEffects: [failEvent],
+      failureEffects: [failEvent, {
+        type: "adjust_mood" as const,
+        entityId: entity.id,
+        delta: -0.15,
+      }],
     };
   }
 
@@ -98,6 +102,13 @@ export const doBreakthrough: ActionResolver = (entity, _actionId, context) => {
     entityId: entity.id,
     realm: newRealm,
     newProportionLimit,
+  });
+
+  // 突破大喜
+  effects.push({
+    type: "adjust_mood",
+    entityId: entity.id,
+    delta: 0.20,
   });
 
   effects.push({

@@ -109,6 +109,14 @@ export interface CreateEntityEffect {
   readonly parentIds?: string[];
 }
 
+/** Adjust an entity's mood value */
+export interface AdjustMoodEffect {
+  readonly type: "adjust_mood";
+  readonly entityId: string;
+  /** Change to mood (-1 to +1 range, result clamped to [0, 1]) */
+  readonly delta: number;
+}
+
 /** Union of all effect types */
 export type Effect =
   | TransferEffect
@@ -122,7 +130,8 @@ export type Effect =
   | SyncAmbientEffect
   | AddRelationTagEffect
   | RemoveRelationTagEffect
-  | CreateEntityEffect;
+  | CreateEntityEffect
+  | AdjustMoodEffect;
 
 // ── ActionOutcome ────────────────────────────────────────────
 

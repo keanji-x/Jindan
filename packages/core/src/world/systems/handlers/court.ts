@@ -28,6 +28,16 @@ export const doCourt: ActionResolver = (entity, _actionId, context) => {
         delta: 15,
       },
       {
+        type: "adjust_mood",
+        entityId: entity.id,
+        delta: 0.08,
+      },
+      {
+        type: "adjust_mood",
+        entityId: context.target!.id,
+        delta: 0.05,
+      },
+      {
         type: "emit_event",
         event: {
           tick: context.tick,

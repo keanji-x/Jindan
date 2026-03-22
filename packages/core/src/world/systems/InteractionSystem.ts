@@ -41,7 +41,7 @@ export const DEVOUR: ActionDef = {
   id: "devour",
   name: "吞噬",
   description: "攻击其他生灵，胜者夺取败者灵气",
-  qiCost: 10,
+  qiCost: 15,
   needsTarget: true,
   npcTargetFilter: "npc-only",
   relationRange: [-100, 50],
@@ -55,7 +55,7 @@ export const CHAT: ActionDef = {
   id: "chat",
   name: "传音",
   description: "向其他生灵发送神念",
-  qiCost: 0,
+  qiCost: 5,
   needsTarget: true,
   relationRange: [-80, 100],
 };
@@ -64,7 +64,7 @@ export const COURT: ActionDef = {
   id: "court",
   name: "求爱",
   description: "向目标表达爱意，提升双方好感",
-  qiCost: 5,
+  qiCost: 15,
   needsTarget: true,
   relationRange: [30, 100],
 };
@@ -73,7 +73,7 @@ export const ACQUIRE: ActionDef = {
   id: "acquire",
   name: "获取",
   description: "获取目标的所有权（法宝、灵植等）",
-  qiCost: 5,
+  qiCost: 15,
   needsTarget: true,
   relationRange: [-100, 100],
 };
@@ -82,7 +82,7 @@ export const ENSLAVE: ActionDef = {
   id: "enslave",
   name: "奴役",
   description: "以力服人，奴役弱小生灵（需境界高出2级）",
-  qiCost: 20,
+  qiCost: 60,
   needsTarget: true,
   npcTargetFilter: "npc-only",
   relationRange: [-100, 30],
@@ -98,7 +98,7 @@ export const MATE: ActionDef = {
   id: "mate",
   name: "合欢",
   description: "与伴侣结合繁衍后代（双方需高好感度）",
-  qiCost: 15,
+  qiCost: 20,
   needsTarget: true,
   relationRange: [70, 100],
 };
@@ -107,7 +107,7 @@ export const RECRUIT: ActionDef = {
   id: "recruit",
   name: "招揽",
   description: "将目标收入门下，建立师徒或宗门关系",
-  qiCost: 10,
+  qiCost: 25,
   needsTarget: true,
   relationRange: [20, 100],
 };
@@ -116,7 +116,7 @@ export const TREAT: ActionDef = {
   id: "treat",
   name: "请客",
   description: "以灵气设宴款待目标，赠送灵气并大幅提升好感",
-  qiCost: 8,
+  qiCost: 20,
   needsTarget: true,
   relationRange: [-50, 100],
 };
@@ -125,7 +125,7 @@ export const TRAVEL: ActionDef = {
   id: "travel",
   name: "共游",
   description: "与同伴结伴游历山水间，提升好感",
-  qiCost: 3,
+  qiCost: 8,
   needsTarget: true,
   relationRange: [10, 100],
 };

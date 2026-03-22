@@ -16,47 +16,33 @@ export const UNIVERSE: UniverseConfig = {
   generators: ALL_GENERATORS,
 
   // ── World Constants ────────────────────────────────────────
-  totalParticles: 1_000,
+  totalParticles: 50_000,
   tickIntervalMs: 15_000,
   ledgerWindowSize: 2000,
 
   // ── Breakthrough ───────────────────────────────────────────
   breakthrough: {
-    qiCostPerRealm: 10,
-    /** Required qi ratio to attempt breakthrough (now proportion-based) */
-    minQiRatio: 0.9,
-    baseSuccessRate: 0.25,
+    qiCostPerRealm: 20,
+    /** Required qi ratio to attempt breakthrough (proportion-based) */
+    minQiRatio: 0.8,
+    baseSuccessRate: 0.3,
     maxSuccessRate: 0.85,
     failLossRatio: 0,
-    burnRatio: 0.9,
+    burnRatio: 0.8,
     maxRealm: 10,
   },
 
-  // ── Drain exponential base: drain = baseDrain × drainBase^(realm-1) ──
+  // ── Drain & Absorb ─────────────────────────────────────────
   drainBase: 1.5,
-  /** QS infiltration k: higher = more QS seeps in when environment is polluted */
-  infiltrationK: 2,
-  /** QL dissipation k: higher = more QL leaks when ambient is sparse */
-  dissipationK: 2,
-
-  // ── Passive Drain Formula ──────────────────────────────────
-  drainFormula: (baseDrain, _totalParticles, _ambientCore) => {
-    return baseDrain;
-  },
+  absorbScale: 1.0,
+  drainScale: 1.0,
+  /** 天劫触发阈值 (1.5× proportionLimit) */
+  tribulationThreshold: 1.5,
 
   // ── Ecology Parameters ────────────────────────────────────
   ecology: {
-    baseAmbientCap: 200,
-    ambientDensity: 1,
-    spawnBaseChance: 0.3,
-    maxEntities: 30,
+    spawnBaseChance: 0.08,
+    maxEntities: 50,
   },
 
-  // ── 天道裁决参数 ────────────────────────────────────────
-  daoJudgment: {
-    /** 每 tick 天道从超标实体回收的粒子比率 */
-    drainRate: 0.3,
-    /** 天道占比过高时向众生释放的比率 */
-    releaseRate: 0.2,
-  },
 };

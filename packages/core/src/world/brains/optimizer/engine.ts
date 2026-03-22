@@ -1,6 +1,7 @@
 import type { ObjectiveFunction, Optimizer, StateSimulator } from "./types.js";
 
 export class HeuristicSearchOptimizer<S, A> implements Optimizer<S, A> {
+  /** Returns only the best first action (original behavior) */
   optimize(
     initialState: S,
     availableActions: (state: S) => A[],
@@ -8,33 +9,58 @@ export class HeuristicSearchOptimizer<S, A> implements Optimizer<S, A> {
     objective: ObjectiveFunction<S>,
     depth: number,
   ): A | null {
-    const actions = availableActions(initialState);
-    if (actions.length === 0) return null;
+    const plan = this.optimizePlan(initialState, availableActions, simulator, objective, depth);
+    return plan.length > 0 ? plan[0]! : null;
+  }
 
-    let bestAction: A | null = null;
-    let bestScore = -Infinity;
+  /**
+   * Returns the full N-step optimal action plan.
+   * Each step is greedily chosen: pick the best action at each level,
+   * then simulate forward and repeat.
+   */
+  optimizePlan(
+    initialState: S,
+    availableActions: (state: S) => A[],
+    simulator: StateSimulator<S, A>,
+    objective: ObjectiveFunction<S>,
+    depth: number,
+  ): A[] {
+    const plan: A[] = [];
+    let currentState = initialState;
 
-    for (const action of actions) {
-      const score = this.evaluateAction(
-        initialState,
-        action,
-        availableActions,
-        simulator,
-        objective,
-        depth,
-      );
+    for (let step = 0; step < depth; step++) {
+      const actions = availableActions(currentState);
+      if (actions.length === 0) break;
 
-      // Slight randomness to resolve ties dynamically rather than always selecting the first one
-      const jitter = Math.random() * 0.0001;
-      const finalScore = score + jitter;
+      let bestAction: A | null = null;
+      let bestScore = -Infinity;
+      const remainingDepth = depth - step;
 
-      if (finalScore > bestScore) {
-        bestScore = finalScore;
-        bestAction = action;
+      for (const action of actions) {
+        const score = this.evaluateAction(
+          currentState,
+          action,
+          availableActions,
+          simulator,
+          objective,
+          remainingDepth,
+        );
+
+        const jitter = Math.random() * 0.0001;
+        const finalScore = score + jitter;
+
+        if (finalScore > bestScore) {
+          bestScore = finalScore;
+          bestAction = action;
+        }
       }
+
+      if (!bestAction) break;
+      plan.push(bestAction);
+      currentState = simulator.simulate(currentState, bestAction);
     }
 
-    return bestAction;
+    return plan;
   }
 
   private evaluateAction(

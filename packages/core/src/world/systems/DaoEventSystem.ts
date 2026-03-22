@@ -149,7 +149,7 @@ const daoEvents: DaoEvent[] = [
     emoji: "⚡",
     weight: 1,
     execute: (ctx) => {
-      // 随机选一个高境界实体受天劫 (损失大量灵气)
+      // 优先选占比 > 2× proportionLimit 的实体，否则随机选高境界者
       const candidates = ctx.entities.filter(
         (e) =>
           e.status === "alive" &&
@@ -159,7 +159,18 @@ const daoEvents: DaoEvent[] = [
       );
       if (candidates.length === 0) return;
 
-      const target = candidates[Math.floor(Math.random() * candidates.length)]!;
+      const overLimitEntities = candidates.filter((e) => {
+        const tank = e.components.tank!;
+        const qi = tank.tanks[tank.coreParticle] ?? 0;
+        const reactor = UNIVERSE.reactors[e.species];
+        if (!reactor) return false;
+        const limit = reactor.proportionLimit(e.components.cultivation?.realm ?? 1);
+        return qi / UNIVERSE.totalParticles > limit * UNIVERSE.tribulationThreshold;
+      });
+
+      const pool = overLimitEntities.length > 0 ? overLimitEntities : candidates;
+      const target = pool[Math.floor(Math.random() * pool.length)]!;
+
       const tank = target.components.tank!;
       const core = tank.coreParticle;
       const qi = tank.tanks[core] ?? 0;
@@ -203,7 +214,25 @@ export const DaoEventSystem: GameSystem = {
   name: "天象异变",
   actions: [], // 纯被动系统
   onTick: (context) => {
-    // Probability gate
+    // ── Deterministic trigger: extreme over-proportion → 天劫 ──
+    const extremeEntities = context.entities.filter((e) => {
+      if (e.status !== "alive" || e.species === "dao" || !e.components.tank) return false;
+      const tank = e.components.tank;
+      const qi = tank.tanks[tank.coreParticle] ?? 0;
+      const reactor = UNIVERSE.reactors[e.species];
+      if (!reactor) return false;
+      const limit = reactor.proportionLimit(e.components.cultivation?.realm ?? 1);
+      return qi / UNIVERSE.totalParticles > limit * UNIVERSE.tribulationThreshold;
+    });
+
+    if (extremeEntities.length > 0) {
+      // Force heaven_wrath on each extreme entity
+      const heavenWrath = daoEvents.find((e) => e.id === "heaven_wrath")!;
+      heavenWrath.execute(context);
+      return; // Skip random event this tick
+    }
+
+    // ── Random probability gate ──
     if (Math.random() > EVENT_CHANCE) return;
 
     const event = pickWeightedEvent();

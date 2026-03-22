@@ -56,7 +56,7 @@ describe("ActionGraph Execution (Gongfa)", () => {
     const finalQi = entity.components.tank!.tanks[core]!;
     expect(finalQi).toBeGreaterThan(qiAfterTick1);
 
-    // After graph completes, settle should still apply passive drain (DaoJudgment)
+    // After graph completes, settle should still apply passive drain
     // but entity keeps its qi (may lose small amount to drain)
     const snapshotQi = finalQi;
     world.settle();

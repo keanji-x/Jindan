@@ -87,6 +87,13 @@ export const doDevour: ActionResolver = (entity, _actionId, context) => {
     delta: -30,
   });
 
+  // 5. 杀伐损心境
+  effects.push({
+    type: "adjust_mood",
+    entityId: entity.id,
+    delta: -0.05,
+  });
+
   // 5. 结算吞噬者存活情况
   if (!alive) {
     effects.push({

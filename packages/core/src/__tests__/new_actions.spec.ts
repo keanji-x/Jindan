@@ -297,7 +297,7 @@ describe("New Action System (新增行动系统)", () => {
       }
 
       // World should still be stable after many ticks with random events
-      const pool = world.qiPool.state;
+      const pool = world.getDaoPoolState();
       expect(pool.pools.ql).toBeGreaterThanOrEqual(0);
       expect(pool.pools.qs).toBeGreaterThanOrEqual(0);
     });
@@ -313,7 +313,7 @@ describe("New Action System (新增行动系统)", () => {
 
       const result = world.performAction(a.id, "treat", b.id);
       expect(result.success).toBe(true);
-      expect(world.relations.get(a.id, b.id)).toBe(10);
+      expect(world.relations.get(a.id, b.id)).toBe(20);
     });
 
     it("请客会转移灵气给目标", () => {

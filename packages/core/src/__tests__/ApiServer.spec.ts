@@ -48,7 +48,7 @@ describe("ApiServer", () => {
     const res = await fetchJson(`http://127.0.0.1:${PORT}/world/status`);
     expect(res.status).toBe(200);
     expect(res.data).toHaveProperty("tick");
-    expect(res.data).toHaveProperty("ambientPool");
+    expect(res.data).toHaveProperty("daoTanks");
     expect(res.data).toHaveProperty("entities");
   });
 

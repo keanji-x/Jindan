@@ -39,9 +39,11 @@ export const doAbsorb: ActionResolver = (entity, actionId, context) => {
     return { status: "aborted", reason: `无吸收参数: ${action}` };
   }
   const basePull = absorbRate.base + absorbRate.perRealm * cultComp.realm;
-  // 吸收倍率在 0.8~1.2 之间随机，模拟天道不确定性
-  const absorptionMultiplier = 0.8 + Math.random() * 0.4;
-  const pullAmount = Math.floor(basePull * absorptionMultiplier);
+  // 吸收倍率在 0.8~1.2 之间随机，模拟天道不确定性，乘以全局 absorbScale
+  const absorptionMultiplier = (0.8 + Math.random() * 0.4) * UNIVERSE.absorbScale;
+  // 心境影响吸收效率: mood 0→0.5×, 0.5→1.0×, 1.0→1.5×
+  const moodModifier = 0.5 + (entity.components.mood?.value ?? 0.5);
+  const pullAmount = Math.floor(basePull * absorptionMultiplier * moodModifier);
 
   // 根据 absorbSource 决定从哪里拉粒子
   // 对于普通生物（absorbSource: "dao"），从 ambient pool 拉
@@ -82,12 +84,12 @@ export const doAbsorb: ActionResolver = (entity, actionId, context) => {
     simTank,
     simAmbient,
     incomingBucket,
-    UNIVERSE.ecology.ambientDensity,
+    1, // density concept removed — Dao IS the reservoir
     cultComp.realm,
     speciesReactor.ownPolarity,
   );
 
-  // 不再有 Tank Overflow Dump — 天道裁决在 tick 结算时统一处理
+  // 不再有 Tank Overflow Dump — 天道通过标准 drain 自然回收，极端占比触发天劫
 
   const finalQi = simTank[core] ?? 0;
   const actualNetGained = finalQi - startQi;

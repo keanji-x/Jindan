@@ -57,8 +57,6 @@ export interface ReactorTemplate {
   ownPolarity: Record<ParticleId, number>;
   /** Available actions for this species (ActionDef instances, may carry absorbRate etc.) */
   actions: ActionDef[];
-  /** Amount this species increases the global ambient capacity */
-  ambientCapContribution: number;
   /**
    * 全局实例上限。undefined = 无限制。
    * 例如 maxInstances: 1 = 全服唯一（先天灵宝、混沌神器等）
@@ -72,6 +70,8 @@ export interface ReactorTemplate {
   npcNames?: string[];
   /** NPC 脑类型 ID（AI 策略标识，对应 AiRegistry 里的 brain） */
   npcBrainId?: string;
+  /** Brain lookahead depth (higher = smarter). Defaults to ACTIONS_PER_TICK. */
+  brainDepth?: number;
 }
 
 // ── Species Generators ───────────────────────────────────────
@@ -120,28 +120,17 @@ export interface UniverseConfig {
   };
   /** Drain exponential base: drain = baseDrain × drainBase^(realm-1) */
   drainBase: number;
-  /** QS infiltration exp factor: infiltration = baseDrain × (exp(k × qs_ratio × density) - 1) */
-  infiltrationK: number;
-  /** QL dissipation exp factor: dissipation = baseDrain × (exp(k × (1 - density)) - 1) */
-  dissipationK: number;
-  /** Passive drain formula */
-  drainFormula: (baseDrain: number, totalParticles: number, ambientCore: number) => number;
+  /** Global absorb multiplier applied to all species' absorbRate */
+  absorbScale: number;
+  /** Global drain multiplier applied to all species' baseDrainRate */
+  drainScale: number;
+  /** Proportion multiplier for 天劫 deterministic trigger (e.g. 2.0 = fires at 2× proportionLimit) */
+  tribulationThreshold: number;
   /** Ecology auto-regulation parameters */
   ecology: {
-    /** Base ambient pool capacity (without entities) */
-    baseAmbientCap: number;
-    /** Ambient density limit */
-    ambientDensity: number;
     /** SpawnPool: base chance per tick for entity generation */
     spawnBaseChance: number;
     /** SpawnPool: max entities in world (controls emptiness factor) */
     maxEntities: number;
-  };
-  /** 天道裁决参数 */
-  daoJudgment: {
-    /** 每 tick 天道回收超标粒子的比率 (0-1)。越高回收越猛。 */
-    drainRate: number;
-    /** 天道实体占比过高时向众生释放的比率 (0-1) */
-    releaseRate: number;
   };
 }

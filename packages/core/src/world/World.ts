@@ -1,11 +1,14 @@
 // ============================================================
 // World — thin coordinator (owns all structured state)
 //
-// v5: WorldLedger dissolved. World directly owns:
+// v6: QiPoolManager removed. Dao entity IS the qi reservoir.
 //   - Entity CRUD (via StorageBackend)
-//   - QiPoolManager (ambient qi)
+//   - Dao entity holds all universe qi in its tanks
 //   - EventGraph (structured event history)
 // ============================================================
+
+/** Dao entity ID — the universe's qi reservoir */
+export const DAO_ENTITY_ID = "__dao__";
 
 import { nanoid } from "nanoid";
 import { EventBus } from "../EventBus.js";
@@ -22,7 +25,7 @@ import { registerBuiltinGraphs } from "./effects/graphs/index.js";
 import type { ActionOutcome, Effect } from "./effects/types.js";
 import { createEntity } from "./factory.js";
 import { Formatters } from "./formatters.js";
-import { QiPoolManager } from "./QiPoolManager.js";
+
 import { RelationGraph } from "./RelationGraph.js";
 import { ParticleTransfer } from "./reactor/ParticleTransfer.js";
 import { Reactor } from "./reactor/Reactor.js";
@@ -50,7 +53,6 @@ import type {
 export class World {
   readonly events = new EventBus();
   public readonly storage: StorageBackend;
-  public readonly qiPool: QiPoolManager;
   public readonly eventGraph: EventGraph;
   public readonly relations: RelationGraph;
   public readonly effectPipeline: EffectPipeline;
@@ -62,18 +64,22 @@ export class World {
 
     this.storage = storage ?? new MemoryStorage();
 
-    // Use SA-tunable totalParticles as the initial ambient qi base
-    // SpawnPool will organically generate life from this ambient qi
-    this.qiPool = new QiPoolManager(
-      UNIVERSE.totalParticles,
-      UNIVERSE.particles as { id: string }[],
-      this.storage,
-    );
     this.eventGraph = new EventGraph(this.storage, UNIVERSE.ledgerWindowSize);
     this.relations = new RelationGraph(this.storage);
     this.effectPipeline = new EffectPipeline();
 
     this.registerSystems();
+
+    // Bootstrap Dao entity — the universe's qi reservoir
+    // Dao holds ALL particles; entities absorb FROM Dao
+    if (!this.storage.getEntity(DAO_ENTITY_ID)) {
+      const dao = createEntity("天道", "dao");
+      (dao as { id: string }).id = DAO_ENTITY_ID;
+      const tank = dao.components.tank!;
+      tank.tanks.ql = Math.floor(UNIVERSE.totalParticles / 2);
+      tank.tanks.qs = Math.floor(UNIVERSE.totalParticles / 2);
+      this.setEntity(dao);
+    }
 
     // Restore tick and dynamic reactors from persisted storage
     if (storage) {
@@ -141,7 +147,7 @@ export class World {
   }
 
   getAliveEntities(species?: SpeciesType): Entity[] {
-    const all = this.storage.getAllEntities().filter((e) => e.status === "alive");
+    const all = this.storage.getAllEntities().filter((e) => e.status === "alive" && e.id !== DAO_ENTITY_ID);
     return species ? all.filter((e) => e.species === species) : all;
   }
 
@@ -174,10 +180,29 @@ export class World {
     return this._tick;
   }
 
+  /** Returns the Dao entity's tanks — the universe's qi reservoir */
+  getDaoTanks(): Record<string, number> {
+    const dao = this.getEntity(DAO_ENTITY_ID);
+    if (!dao?.components.tank) throw new Error("天道实体丢失");
+    return dao.components.tank.tanks;
+  }
+
+  /** Returns {pools, total} wrapping Dao tanks for backward compat with ActionContext */
+  getDaoPoolState(): { pools: Record<string, number>; total: number } {
+    return { pools: this.getDaoTanks(), total: UNIVERSE.totalParticles };
+  }
+
+  /** Convenience: get the Dao entity itself */
+  getDaoEntity(): Entity {
+    const dao = this.getEntity(DAO_ENTITY_ID);
+    if (!dao) throw new Error("天道实体丢失");
+    return dao;
+  }
+
   getSnapshot() {
     return {
       tick: this._tick,
-      ambientPool: { ...this.qiPool.state, pools: { ...this.qiPool.state.pools } },
+      daoTanks: { ...this.getDaoTanks() },
       entities: this.getAliveEntities(),
     };
   }
@@ -188,7 +213,7 @@ export class World {
     // ── 生灵账本守门（全局位格 + 物种配额） ──────────────
     const aliveEntities = this.getAliveEntities();
     if (
-      !BeingLedger.canAcquire(species, aliveEntities, this.qiPool.state, UNIVERSE.totalParticles)
+      !BeingLedger.canAcquire(species, aliveEntities, this.getDaoPoolState(), UNIVERSE.totalParticles)
     ) {
       const reactor = UNIVERSE.reactors[species];
       throw new Error(`「${reactor?.name ?? species}」无法创建：世界位格已满或物种配额不足`);
@@ -196,12 +221,12 @@ export class World {
 
     const entity = createEntity(name, species);
 
-    // 粒子守恒：从天地灌注 birthCost 初始粒子（转移，不创造）
+    // 粒子守恒：从天道灌注 birthCost 初始粒子（转移，不创造）
     const tank = entity.components.tank;
     if (tank) {
       const reactor = UNIVERSE.reactors[species];
       if (reactor) {
-        ParticleTransfer.transfer(this.qiPool.state.pools, tank.tanks, {
+        ParticleTransfer.transfer(this.getDaoTanks(), tank.tanks, {
           [tank.coreParticle]: reactor.birthCost,
         });
       }
@@ -320,14 +345,14 @@ export class World {
     const cost = actionDef.qiCost;
     const tankComp = entity.components.tank;
     if (tankComp && cost > 0) {
-      ParticleTransfer.transfer(tankComp.tanks, this.qiPool.state.pools, {
+      ParticleTransfer.transfer(tankComp.tanks, this.getDaoTanks(), {
         [tankComp.coreParticle]: cost,
       });
     }
 
     const ctx: ActionContext = {
       actionCost: cost,
-      ambientPool: this.qiPool.state,
+      ambientPool: this.getDaoPoolState(),
       tick: this._tick,
       events: this.events,
       payload: activeGraph.payload,
@@ -368,7 +393,7 @@ export class World {
     const isSuccess = outcome.status === "success";
     // Refund cost on abort or failure
     if (!isSuccess && tankComp && cost > 0) {
-      ParticleTransfer.transfer(this.qiPool.state.pools, tankComp.tanks, {
+      ParticleTransfer.transfer(this.getDaoTanks(), tankComp.tanks, {
         [tankComp.coreParticle]: cost,
       });
     }
@@ -440,7 +465,9 @@ export class World {
   private advanceTick(): void {
     this._tick += 1;
     this.storage.setTick(this._tick);
-    const aliveEntities = this.getAliveEntities();
+    // Include Dao for internal tick processing (drain needs it as qi sink)
+    const daoEntity = this.getDaoEntity();
+    const aliveEntities = [daoEntity, ...this.getAliveEntities()];
     const deadEntities = this.storage.getAllEntities().filter((e) => e.status === "entombed");
 
     // 1. 结算所有被动法则系统 (替换旧有的 drainAll 与 runSpawnPool)
@@ -448,7 +475,7 @@ export class World {
       tick: this._tick,
       entities: aliveEntities,
       deadEntities,
-      ambientPool: this.qiPool.state,
+      ambientPool: this.getDaoPoolState(),
       events: this.events,
       world: this,
       addEntity: (e: Entity) => this.setEntity(e),
@@ -476,7 +503,7 @@ export class World {
     // 1.5 被动系统结算后的生命周期检查
     this.checkLifecycle();
 
-    // 天道裁决现已通过 DrainSystem 中的 DaoJudgment 处理，不再需要静态容量限制
+    // 天道裁决现已通过 DrainSystem 标准代谢处理，极端占比由 DaoEventSystem 天劫触发
 
     this.events.emit({
       tick: this._tick,
@@ -486,7 +513,7 @@ export class World {
     });
 
     // Flush dirty state to persistent storage
-    this.storage.setQiPoolState(this.qiPool.state);
+    // Dao state persisted via entity storage (no separate qiPool)
     this.storage.setRelations(this.relations.toJSON());
     this.storage.setReactors(UNIVERSE.reactors);
     this.storage.flush().catch((err) => {
@@ -496,12 +523,12 @@ export class World {
 
   // ── Helpers ──────────────────────────────────────────────
 
-  getAvailableActions(entityId: string, maxSamples: number = 16): AvailableAction[] {
+  getAvailableActions(entityId: string, maxSamples: number = 5): AvailableAction[] {
     const entity = this.getEntity(entityId);
     if (!entity || entity.status !== "alive") return [];
 
     const speciesActions = ActionRegistry.forSpecies(entity.species);
-    const aliveTargets = this.getAliveEntities().filter((e) => e.id !== entityId);
+    const aliveTargets = this.getAliveEntities().filter((e) => e.id !== entityId && e.id !== DAO_ENTITY_ID);
     const allOptions: AvailableAction[] = [];
 
     for (const def of speciesActions) {
@@ -551,12 +578,40 @@ export class World {
       }
     }
 
+    // Action-diversity sampling:
+    // 1. ALL non-target actions always included (meditate, photosynth, rest...)
+    // 2. For each target-action type, pick 1 best target (highest relation)
+    // 3. Cap total at maxSamples — ensures brain sees ALL action types
     const possibleActions = allOptions.filter((a) => a.possible);
     const impossibleActions = allOptions.filter((a) => !a.possible);
 
-    // 随机采样 possible 的 Action
-    possibleActions.sort(() => Math.random() - 0.5);
-    const sampled = possibleActions.slice(0, maxSamples);
+    // Split into non-target (always included) and target (1 best per type)
+    const nonTargetActions: AvailableAction[] = [];
+    const byType = new Map<string, AvailableAction[]>();
+    for (const a of possibleActions) {
+      if (a.targetId) {
+        const arr = byType.get(a.action) ?? [];
+        arr.push(a);
+        byType.set(a.action, arr);
+      } else {
+        nonTargetActions.push(a);
+      }
+    }
+
+    // For each target-action type, pick best target by relation
+    const bestTargetActions: AvailableAction[] = [];
+    for (const [, actions] of byType) {
+      // Sort by relation score, pick top 1
+      actions.sort((a, b) => {
+        const relA = this.relations.get(entityId, a.targetId!);
+        const relB = this.relations.get(entityId, b.targetId!);
+        return relB - relA;
+      });
+      bestTargetActions.push(actions[0]!);
+    }
+
+    // Combine: non-target first (guaranteed), then best targets
+    const sampled = [...nonTargetActions, ...bestTargetActions].slice(0, maxSamples);
 
     return [...sampled, ...impossibleActions];
   }
@@ -589,7 +644,7 @@ export class World {
       this.relations.adjust(effect.a, effect.b, effect.delta);
     } else if (effect.type === "transfer") {
       const getResource = (id: string) => {
-        if (id === "ambient") return this.qiPool.state.pools;
+        if (id === "ambient") return this.getDaoTanks();
         const e = this.getEntity(id);
         return e?.components.tank?.tanks;
       };
@@ -616,9 +671,9 @@ export class World {
       if (e && tankComp && cultComp && template) {
         const { alive } = Reactor.processIncomingBeam(
           tankComp.tanks,
-          this.qiPool.state.pools,
+          this.getDaoTanks(),
           effect.beam,
-          UNIVERSE.ecology.ambientDensity,
+          1, // density concept removed — Dao IS the reservoir
           effect.sourceRealm,
           template.ownPolarity,
         );
@@ -637,7 +692,7 @@ export class World {
       }
     } else if (effect.type === "sync_ambient") {
       // Replace ambient pools entirely to match resolver simulation
-      this.qiPool.state.pools = { ...effect.pools };
+      Object.assign(this.getDaoTanks(), effect.pools);
     } else if (effect.type === "add_relation_tag") {
       this.relations.addTag(effect.a, effect.b, effect.tag as RelationTag);
     } else if (effect.type === "remove_relation_tag") {
@@ -655,6 +710,11 @@ export class World {
         }
       } catch (_err) {
         // Entity creation can fail (e.g. world full) — silently skip
+      }
+    } else if (effect.type === "adjust_mood") {
+      const e = this.getEntity(effect.entityId);
+      if (e?.components.mood) {
+        e.components.mood.value = Math.max(0, Math.min(1, e.components.mood.value + effect.delta));
       }
     }
   }
@@ -804,7 +864,7 @@ export class World {
     if (tank) {
       const reactor = UNIVERSE.reactors[newSpecies];
       if (reactor) {
-        ParticleTransfer.transfer(this.qiPool.state.pools, tank.tanks, {
+        ParticleTransfer.transfer(this.getDaoTanks(), tank.tanks, {
           [tank.coreParticle]: reactor.birthCost,
         });
       }
@@ -828,7 +888,7 @@ export class World {
 
   /** 将当前状态刷写到持久化存储 */
   async flush(): Promise<void> {
-    this.storage.setQiPoolState(this.qiPool.state);
+    // Dao state persisted via entity storage (no separate qiPool)
     this.storage.setRelations(this.relations.toJSON());
     this.storage.setReactors(UNIVERSE.reactors);
     await this.storage.flush();

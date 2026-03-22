@@ -137,7 +137,7 @@ export class ApiServer {
               const qiMax = Math.floor(speciesLimit * UNIVERSE.totalParticles);
               const recentEvents = this.world.eventGraph.getRecentForEntity(npc.id);
 
-              const decision = brain.decide(actions, { qiCurrent, qiMax, qiRatio, recentEvents });
+              const decision = brain.decide(actions, { qiCurrent, qiMax, qiRatio, mood: npc.components.mood?.value ?? 0.5, recentEvents });
               if (decision) {
                 this.world.performAction(
                   npc.id,

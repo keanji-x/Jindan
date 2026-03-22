@@ -32,6 +32,12 @@ export interface CultivationComponent {
   realm: number;
 }
 
+/** 组件：心境 (情绪影响吸收效率) */
+export interface MoodComponent {
+  /** 0.0 (心如死灰) ~ 1.0 (道心通明)，默认 0.5 */
+  value: number;
+}
+
 /** 世界中的一个生灵 (reactor) */
 export interface Entity {
   id: string;
@@ -46,6 +52,7 @@ export interface Entity {
   components: {
     tank?: TankComponent;
     cultivation?: CultivationComponent;
+    mood?: MoodComponent;
     brain?: { id: string };
     actionGraph?: ActiveGraph;
   };

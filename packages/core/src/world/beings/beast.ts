@@ -1,19 +1,30 @@
 import type { ReactorTemplate } from "../config/types.js";
-import { CHAT, COURT, DEVOUR, MATE, TRAVEL, TREAT } from "../systems/InteractionSystem.js";
-import { BREAKTHROUGH, MOONLIGHT, REST, SPAWN_OFFSPRING } from "../systems/SingleEntitySystem.js";
+import {
+  MOONLIGHT,
+  BREAKTHROUGH,
+  REST,
+  SPAWN_OFFSPRING,
+} from "../systems/SingleEntitySystem.js";
+import {
+  DEVOUR,
+  CHAT,
+  COURT,
+  MATE,
+  TREAT,
+  TRAVEL,
+} from "../systems/InteractionSystem.js";
 
-/** 妖兽 — 以煞气 (QS) 为核心的野兽 */
 export const BeastReactor: ReactorTemplate = {
   id: "beast",
   name: "妖兽",
   coreParticle: "qs",
   proportionLimit: (realm) => 0.04 * realm,
-  birthCost: 30,
+  birthCost: 120,
   absorbSource: "dao",
-  baseDrainRate: 3,
+  baseDrainRate: 10,
   ownPolarity: { qs: 1.0, ql: 0.0 },
   actions: [
-    { ...MOONLIGHT, absorbRate: { base: 6, perRealm: 2 } },
+    { ...MOONLIGHT, absorbRate: { base: 50, perRealm: 20 } },
     DEVOUR,
     BREAKTHROUGH,
     REST,
@@ -24,7 +35,6 @@ export const BeastReactor: ReactorTemplate = {
     TREAT,
     TRAVEL,
   ],
-  ambientCapContribution: 150,
-  npcNames: ["噬煞蝇", "变异黑蝇", "巨型噬煞蝇", "群居幼蝇", "煞气巡回蝇"],
+  npcNames: ["灵狐", "天蟒", "金翅大鹏", "青牛", "九尾猫"],
   npcBrainId: "heuristic_optimizer",
 };
