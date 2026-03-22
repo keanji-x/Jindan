@@ -29,7 +29,7 @@ describe("ActionRegistry", () => {
     id: "system1",
     name: "System 1",
     actions: [mockAction1, mockAction2],
-    handler: (_entity, _actionId, _ctx) => ({ success: true, newQi: 0 }),
+    handler: (_entity, _actionId, _ctx) => ({ status: "success" as const, successEffects: [] }),
   };
 
   it("should register a system and its actions", () => {

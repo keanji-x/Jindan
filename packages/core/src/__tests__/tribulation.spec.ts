@@ -24,7 +24,7 @@ describe("TribulationGenerator", () => {
           needsTarget: false,
         },
       ],
-      handler: () => ({ success: true, newQi: 0 }),
+      handler: () => ({ status: "success" as const, successEffects: [] }),
     } as any);
   });
 

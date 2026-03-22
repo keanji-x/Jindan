@@ -7,7 +7,7 @@
 
 import type { EventBus } from "../../EventBus.js";
 import type { AmbientPool, Entity } from "../types.js";
-import type { ActionDef, ActionHandler, ActionResolver } from "./types.js";
+import type { ActionDef, ActionResolver } from "./types.js";
 
 // Forward reference to World to avoid circular imports
 // Systems that need World access should use `context.world`
@@ -41,7 +41,7 @@ export interface GameSystem {
   /** 此系统主动提供的 Action 定义 (如无主动 action 可为空数组) */
   actions: ActionDef[];
   /** 主动 Action 的统一执行器 — 如果 actions 不为空则必须提供 (支持新/旧版本签名) */
-  handler?: ActionHandler | ActionResolver;
+  handler?: ActionResolver;
 
   /**
    * [可选] 被动机制：世界每次 tick 结算时触发的逻辑

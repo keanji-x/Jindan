@@ -22,13 +22,13 @@ start_docker_bg:
 stop_docker:
     docker compose down
 
-# 调用 CLI，例如：just cli create -n TestPlayer -s human
+# 调用 CLI，例如：just cli snapshot
 cli +args:
-    npm exec -w @jindan/cli -- tsx src/index.ts {{args}}
+    npm run dev -w @jindan/cli -- {{args}}
 
 # 启动自动 AI 代理，例如：just start_agent --name "Bot"
 start_agent +args="":
-    npm exec -w @jindan/agent -- tsx src/index.ts {{args}}
+    npm run dev -w @jindan/agent -- {{args}}
 
 # 全量代码静态检查 (Biome) 与类型检查 (TSC)
 check:

@@ -21,16 +21,9 @@ export interface ActionContext {
   adjustRelation(a: string, b: string, delta: number): number;
 }
 
-/** 统一的 Action 执行器 (旧版，待迁移) */
-export type ActionHandler = (
-  entity: Entity,
-  actionId: string,
-  context: ActionContext,
-) => { success: boolean; [key: string]: unknown };
-
 import type { ActionOutcome } from "../effects/types.js";
 
-/** 新版基于声明式 Effect 的解析器 */
+/** 统一的 Action 执行器 — 声明式 Effect 解析器 */
 export type ActionResolver = (
   entity: Entity,
   actionId: string,
@@ -86,4 +79,6 @@ export interface ActionDef {
 /** canExecute 回调的最小世界上下文 — 避免 Action 反向依赖 World 实例 */
 export interface CanExecuteContext {
   getAliveEntities(): Entity[];
+  /** 宇宙粒子总量（等价于 ambientPool.total） */
+  getWorldTotal(): number;
 }

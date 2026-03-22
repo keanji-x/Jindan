@@ -17,7 +17,7 @@ export const UNIVERSE: UniverseConfig = {
 
   // ── World Constants ────────────────────────────────────────
   totalParticles: 50_000,
-  tickIntervalMs: 15_000,
+  tickIntervalMs: 300_000, // 5 分钟 / tick
   ledgerWindowSize: 2000,
 
   // ── Breakthrough ───────────────────────────────────────────

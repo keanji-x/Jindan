@@ -13,11 +13,11 @@
 
 import { UNIVERSE } from "../config/universe.config.js";
 import type { GameSystem } from "./GameSystem.js";
-import type { ActionDef, ActionHandler, ActionResolver } from "./types.js";
+import type { ActionDef, ActionResolver } from "./types.js";
 
 const allActions: ActionDef[] = [];
 const byId = new Map<string, ActionDef>();
-const handlers = new Map<string, ActionHandler | ActionResolver>();
+const handlers = new Map<string, ActionResolver>();
 const registeredSystems: GameSystem[] = [];
 
 /** Global action registry (singleton) */
@@ -43,7 +43,7 @@ export const ActionRegistry = {
   },
 
   /** Get registered execution handler for an action */
-  getHandler(id: string): ActionHandler | ActionResolver | undefined {
+  getHandler(id: string): ActionResolver | undefined {
     return handlers.get(id);
   },
 
