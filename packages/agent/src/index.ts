@@ -13,7 +13,7 @@ import { ApiClient } from "./ApiClient.js";
 import { ChatLogger } from "./ChatLogger.js";
 import { ChatHandler } from "./chatHandler.js";
 import { LlmClient } from "./LlmClient.js";
-import { buildUserPrompt, generateUserPrompt, SYSTEM_PROMPT } from "./prompt.js";
+import { buildUserPrompt, SYSTEM_PROMPT } from "./prompt.js";
 import type { DecisionPacket, ThoughtRecord } from "./types.js";
 import { EMOTION_TAGS } from "./types.js";
 
