@@ -10,9 +10,9 @@
 // ============================================================
 
 import type { EventBus } from "../../../EventBus.js";
-import { DAO_ENTITY_ID } from "../../World.js";
 import { UNIVERSE } from "../../config/universe.config.js";
 import type { Entity } from "../../types.js";
+import { DAO_ENTITY_ID } from "../../World.js";
 
 // -- Handler implementation --
 

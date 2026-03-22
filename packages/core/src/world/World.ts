@@ -147,7 +147,9 @@ export class World {
   }
 
   getAliveEntities(species?: SpeciesType): Entity[] {
-    const all = this.storage.getAllEntities().filter((e) => e.status === "alive" && e.id !== DAO_ENTITY_ID);
+    const all = this.storage
+      .getAllEntities()
+      .filter((e) => e.status === "alive" && e.id !== DAO_ENTITY_ID);
     return species ? all.filter((e) => e.species === species) : all;
   }
 
@@ -213,7 +215,12 @@ export class World {
     // ── 生灵账本守门（全局位格 + 物种配额） ──────────────
     const aliveEntities = this.getAliveEntities();
     if (
-      !BeingLedger.canAcquire(species, aliveEntities, this.getDaoPoolState(), UNIVERSE.totalParticles)
+      !BeingLedger.canAcquire(
+        species,
+        aliveEntities,
+        this.getDaoPoolState(),
+        UNIVERSE.totalParticles,
+      )
     ) {
       const reactor = UNIVERSE.reactors[species];
       throw new Error(`「${reactor?.name ?? species}」无法创建：世界位格已满或物种配额不足`);
@@ -528,7 +535,9 @@ export class World {
     if (!entity || entity.status !== "alive") return [];
 
     const speciesActions = ActionRegistry.forSpecies(entity.species);
-    const aliveTargets = this.getAliveEntities().filter((e) => e.id !== entityId && e.id !== DAO_ENTITY_ID);
+    const aliveTargets = this.getAliveEntities().filter(
+      (e) => e.id !== entityId && e.id !== DAO_ENTITY_ID,
+    );
     const allOptions: AvailableAction[] = [];
 
     for (const def of speciesActions) {

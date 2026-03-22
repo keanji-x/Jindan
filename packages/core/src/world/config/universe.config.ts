@@ -44,5 +44,4 @@ export const UNIVERSE: UniverseConfig = {
     spawnBaseChance: 0.08,
     maxEntities: 50,
   },
-
 };

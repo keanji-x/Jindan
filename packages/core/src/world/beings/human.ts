@@ -1,22 +1,22 @@
 import type { ReactorTemplate } from "../config/types.js";
 import {
-  MEDITATE,
-  BREAKTHROUGH,
-  REST,
-  FOUND_SECT,
-  SPAWN_OFFSPRING,
-} from "../systems/SingleEntitySystem.js";
-import {
-  DEVOUR,
+  ACQUIRE,
   CHAT,
   COURT,
-  ACQUIRE,
+  DEVOUR,
   ENSLAVE,
   MATE,
   RECRUIT,
-  TREAT,
   TRAVEL,
+  TREAT,
 } from "../systems/InteractionSystem.js";
+import {
+  BREAKTHROUGH,
+  FOUND_SECT,
+  MEDITATE,
+  REST,
+  SPAWN_OFFSPRING,
+} from "../systems/SingleEntitySystem.js";
 
 export const HumanReactor: ReactorTemplate = {
   id: "human",

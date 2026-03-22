@@ -40,7 +40,7 @@ export class EntityActionSimulator implements StateSimulator<EntityState, Availa
       case "breakthrough":
         nextState.qiMax *= 2;
         nextState.qiCurrent = nextState.qiMax;
-        nextState.mood = Math.min(1, nextState.mood + 0.20);
+        nextState.mood = Math.min(1, nextState.mood + 0.2);
         break;
       // Social actions: no direct qi gain but boost mood → future absorb efficiency
       // Mood directly multiplies absorb gain (0.5× at mood=0, 1.5× at mood=1),
@@ -66,7 +66,7 @@ export class EntityActionSimulator implements StateSimulator<EntityState, Availa
         break;
       }
       case "mate": {
-        const gain = nextState.mood > 0.7 ? 0.10 : 0.20;
+        const gain = nextState.mood > 0.7 ? 0.1 : 0.2;
         nextState.mood = Math.min(1, nextState.mood + gain);
         break;
       }

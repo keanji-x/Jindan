@@ -32,7 +32,7 @@ export const doTreat: ActionResolver = (entity, _actionId, context) => {
     {
       type: "adjust_mood",
       entityId: entity.id,
-      delta: 0.10,
+      delta: 0.1,
     },
     {
       type: "adjust_mood",

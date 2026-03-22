@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EventBus } from "../EventBus.js";
 import { UNIVERSE } from "../world/config/universe.config.js";
-import { DAO_ENTITY_ID } from "../world/World.js";
 import { executeDrain } from "../world/systems/handlers/drain.js";
+import { DAO_ENTITY_ID } from "../world/World.js";
 
 describe("DrainSystem", () => {
   let events: EventBus;

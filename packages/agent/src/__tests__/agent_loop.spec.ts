@@ -131,8 +131,8 @@ describe("Agent OODA Loop (离线测试)", () => {
     const entity = harness.getEntity()!;
     const tank = entity.components.tank!;
     const core = tank.coreParticle;
-    const ambient = harness.world.qiPool.state;
-    ambient.pools[core] = (ambient.pools[core] ?? 0) + (tank.tanks[core] ?? 0);
+    const ambient = harness.world.getDaoTanks();
+    ambient[core] = (ambient[core] ?? 0) + (tank.tanks[core] ?? 0);
     tank.tanks[core] = 0;
     entity.status = "lingering";
 

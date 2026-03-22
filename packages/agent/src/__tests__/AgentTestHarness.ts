@@ -218,8 +218,8 @@ export class AgentHarness {
       power: 0,
       worldTick: this.world.tick,
       aliveCount: snapshot.entities.length,
-      ambientQl: snapshot.ambientPool.pools.ql,
-      ambientQs: snapshot.ambientPool.pools.qs,
+      ambientQl: snapshot.daoTanks.ql ?? 0,
+      ambientQs: snapshot.daoTanks.qs ?? 0,
     };
 
     // ── Plan ──

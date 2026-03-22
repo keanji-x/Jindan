@@ -57,7 +57,7 @@ describe("World E2E Simulation Harness", () => {
     // Assert structural integrity
     const state = world.getSnapshot();
     expect(state.entities).toBeDefined();
-    expect(state.ambientPool).toBeDefined();
+    expect(state.daoTanks).toBeDefined();
     expect(Array.isArray(state.entities)).toBe(true);
   });
 });

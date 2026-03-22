@@ -1,11 +1,6 @@
 import type { ReactorTemplate } from "../config/types.js";
-import {
-  PHOTOSYNTH,
-  BREAKTHROUGH,
-  REST,
-  SPAWN_OFFSPRING,
-} from "../systems/SingleEntitySystem.js";
-import { CHAT, COURT, MATE, TREAT, TRAVEL } from "../systems/InteractionSystem.js";
+import { CHAT, COURT, MATE, TRAVEL, TREAT } from "../systems/InteractionSystem.js";
+import { BREAKTHROUGH, PHOTOSYNTH, REST, SPAWN_OFFSPRING } from "../systems/SingleEntitySystem.js";
 
 export const PlantReactor: ReactorTemplate = {
   id: "plant",

@@ -36,12 +36,24 @@ export const HeuristicOptimizerBrain: AgentBrain = {
 
     const depth = ctx.brainDepth ?? ACTIONS_PER_TICK;
     const optimizer = new HeuristicSearchOptimizer<EntityState, AvailableAction>();
-    const initialState: EntityState = { qiCurrent: ctx.qiCurrent, qiMax: ctx.qiMax, mood: ctx.mood };
+    const initialState: EntityState = {
+      qiCurrent: ctx.qiCurrent,
+      qiMax: ctx.qiMax,
+      mood: ctx.mood,
+    };
     const getAvailableActions = (state: EntityState) =>
       actions.filter((a) => a.possible && state.qiCurrent >= (ActionRegistry.cost(a.action) ?? 0));
 
-    const bestAction = optimizer.optimize(initialState, getAvailableActions, simulator, objective, depth);
-    return bestAction ? { action: bestAction.action, targetId: bestAction.targetId } : { action: "rest" };
+    const bestAction = optimizer.optimize(
+      initialState,
+      getAvailableActions,
+      simulator,
+      objective,
+      depth,
+    );
+    return bestAction
+      ? { action: bestAction.action, targetId: bestAction.targetId }
+      : { action: "rest" };
   },
 
   decidePlan(actions: AvailableAction[], ctx: BrainContext): BrainDecision[] {
@@ -60,7 +72,7 @@ export const HeuristicOptimizerBrain: AgentBrain = {
       }
 
       // First non-exploration step: use full optimizer plan
-      if (plan.length === 0 || plan.every(p => p.action === "rest")) {
+      if (plan.length === 0 || plan.every((p) => p.action === "rest")) {
         const initialState: EntityState = {
           qiCurrent: ctx.qiCurrent,
           qiMax: ctx.qiMax,

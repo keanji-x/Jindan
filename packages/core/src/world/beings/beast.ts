@@ -1,18 +1,6 @@
 import type { ReactorTemplate } from "../config/types.js";
-import {
-  MOONLIGHT,
-  BREAKTHROUGH,
-  REST,
-  SPAWN_OFFSPRING,
-} from "../systems/SingleEntitySystem.js";
-import {
-  DEVOUR,
-  CHAT,
-  COURT,
-  MATE,
-  TREAT,
-  TRAVEL,
-} from "../systems/InteractionSystem.js";
+import { CHAT, COURT, DEVOUR, MATE, TRAVEL, TREAT } from "../systems/InteractionSystem.js";
+import { BREAKTHROUGH, MOONLIGHT, REST, SPAWN_OFFSPRING } from "../systems/SingleEntitySystem.js";
 
 export const BeastReactor: ReactorTemplate = {
   id: "beast",
