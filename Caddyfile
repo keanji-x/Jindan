@@ -1,11 +1,13 @@
 # ============================================================
 # Caddy 反向代理配置
-# 支持两种模式:
-#   1. 有域名: 自动 HTTPS (Let's Encrypt)
-#   2. 纯 IP:  HTTP 模式 (取消下方 :80 注释)
+#
+# Cloudflare 代理模式 (推荐):
+#   SITE_ADDRESS=:80  → Caddy 仅做 HTTP 反代, SSL 由 CF 终结
+#
+# 自签 HTTPS 模式 (无 CF):
+#   SITE_ADDRESS=yourdomain.com → Caddy 自动 Let's Encrypt
 # ============================================================
 
-# ── 有域名时使用（替换为你的真实域名）──
-{$SITE_ADDRESS:localhost} {
+{$SITE_ADDRESS::80} {
     reverse_proxy core:{$PORT:3001}
 }

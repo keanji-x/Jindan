@@ -28,8 +28,7 @@ export function createEntity(name: string, species: string, options: SpawnOption
   let finalName = name;
   if (!finalName) {
     if (reactor.npcNames && reactor.npcNames.length > 0) {
-      const baseName = reactor.npcNames[Math.floor(Math.random() * reactor.npcNames.length)]!;
-      finalName = realm > 1 ? `${realm}阶${baseName}` : baseName;
+      finalName = reactor.npcNames[Math.floor(Math.random() * reactor.npcNames.length)]!;
     } else {
       finalName = `无名${reactor.name || species}`;
     }

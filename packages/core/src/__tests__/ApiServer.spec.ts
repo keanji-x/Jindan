@@ -58,16 +58,10 @@ describe("ApiServer", () => {
     expect(Array.isArray(res.data)).toBe(true);
   });
 
-  it("should require auth for /auth/me", async () => {
-    const res = await fetchJson(`http://127.0.0.1:${PORT}/auth/me`);
-    expect(res.status).toBe(400); // ApiError throws 400
-    expect(res.data.error).toMatch(/Missing Authorization token/);
-  });
-
-  it("should block empty registration", async () => {
-    const res = await fetchJson(`http://127.0.0.1:${PORT}/auth/register`, "POST", {});
+  it("should require entityId for /char/attach", async () => {
+    const res = await fetchJson(`http://127.0.0.1:${PORT}/char/attach`, "POST", {});
     expect(res.status).toBe(400);
-    expect(res.data.error).toMatch(/username is required/);
+    expect(res.data.error).toMatch(/entityId is required/);
   });
 
   it("should block POST /entity/123/report without agent secret", async () => {

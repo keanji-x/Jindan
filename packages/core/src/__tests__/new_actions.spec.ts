@@ -33,6 +33,42 @@ describe("New Action System (新增行动系统)", () => {
       );
       expect(courtTargets.length).toBe(0);
     });
+
+    it("跨物种求爱应失败", () => {
+      const { world, a } = createTestWorld();
+      const beast = world.createEntity("灵狐", "beast");
+      world.relations.set(a.id, beast.id, 50);
+
+      const result = world.performAction(a.id, "court", beast.id);
+      expect(result.success).toBe(false);
+    });
+  });
+
+  // ── 植物行动限制 (Plant Action Restrictions) ──────────────
+
+  describe("Plant Action Restrictions (灵植行动限制)", () => {
+    it("灵植不应拥有求爱/合欢/请客/共游", () => {
+      const { world } = createTestWorld();
+      const plant = world.createEntity("灵芝", "plant");
+      plant.components.tank!.tanks.ql = 500;
+
+      const actions = world.getAvailableActions(plant.id);
+      const forbidden = ["court", "mate", "treat", "travel"];
+      for (const actionId of forbidden) {
+        const found = actions.filter((a) => a.action === actionId);
+        expect(found.length, `植物不应有 ${actionId}`).toBe(0);
+      }
+    });
+
+    it("灵植应有分裂繁衍(spawn_offspring)", () => {
+      const { world } = createTestWorld();
+      const plant = world.createEntity("灵芝", "plant");
+      plant.components.tank!.tanks.ql = 500;
+
+      const actions = world.getAvailableActions(plant.id);
+      const spawn = actions.find((a) => a.action === "spawn_offspring" && a.possible);
+      expect(spawn).toBeDefined();
+    });
   });
 
   // ── 获取 (Acquire) ───────────────────────────────────────

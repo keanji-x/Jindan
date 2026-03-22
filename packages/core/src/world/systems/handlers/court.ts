@@ -14,6 +14,9 @@ export const doCourt: ActionResolver = (entity, _actionId, context) => {
   if (context.target.status !== "alive") {
     return { status: "aborted", reason: "目标不存在或已消亡" };
   }
+  if (entity.species !== context.target.species) {
+    return { status: "aborted", reason: "只能向同族求爱" };
+  }
 
   const entityName = entity.name || entity.id;
   const targetName = context.target.name || context.target.id;

@@ -1,16 +1,23 @@
 // ============================================================
-// ApiClient — v2: HTTP client wrapping the unified action API
+// ApiClient — CLI HTTP client with auth support
 // ============================================================
 
 import type { ActionId } from "@jindan/core";
 
 export class ApiClient {
-  constructor(private readonly baseUrl: string) {}
+  constructor(
+    private readonly baseUrl: string,
+    private readonly secret?: string,
+  ) {}
 
   private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
+    const headers: Record<string, string> = {};
+    if (body) headers["Content-Type"] = "application/json";
+    if (this.secret) headers["X-Agent-Secret"] = this.secret;
+
     const res = await fetch(`${this.baseUrl}${path}`, {
       method,
-      headers: body ? { "Content-Type": "application/json" } : {},
+      headers,
       body: body ? JSON.stringify(body) : undefined,
     });
 
@@ -29,27 +36,10 @@ export class ApiClient {
 
   // ── Entity ─────────────────────────────────────────────
 
-  createEntity(name: string, species: string) {
-    return this.request<Record<string, unknown>>("POST", "/entity/create", {
-      name,
-      species,
+  getSnapshot(id: string, lastThoughts: unknown[] = []) {
+    return this.request<Record<string, unknown>>("POST", `/entity/${id}/snapshot`, {
+      lastThoughts,
     });
-  }
-
-  getEntity(id: string) {
-    return this.request<Record<string, unknown>>("GET", `/entity/${id}`);
-  }
-
-  getObserve(id: string) {
-    return this.request<Record<string, unknown>>("GET", `/entity/${id}/observe`);
-  }
-
-  getMemory(id: string) {
-    return this.request<Record<string, unknown>>("GET", `/entity/${id}/memory`);
-  }
-
-  getPlan(id: string) {
-    return this.request<Record<string, unknown>[]>("GET", `/entity/${id}/plan`);
   }
 
   postReport(id: string, text: string) {

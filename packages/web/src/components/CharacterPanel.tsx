@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import type { CharacterInfo } from "../api/client";
-import { useAuth } from "../context/AuthContext";
 
 const SPECIES = [
   { id: "human", icon: "🧔", label: "人族" },
@@ -24,12 +23,13 @@ const REALM_NAMES = [
 ];
 
 interface Props {
+  characters: CharacterInfo[];
   activeCharId: string | null;
   onSelect: (entityId: string, secret: string) => void;
+  onRemove: (entityId: string) => void;
 }
 
-export default function CharacterPanel({ activeCharId, onSelect }: Props) {
-  const { characters } = useAuth();
+export default function CharacterPanel({ characters, activeCharId, onSelect, onRemove }: Props) {
   const [error, setError] = useState("");
 
   // Storage for secrets (in memory + localStorage)
@@ -77,33 +77,42 @@ export default function CharacterPanel({ activeCharId, onSelect }: Props) {
           const isActive = c.entityId === activeCharId;
           const hasSecret = secrets.has(c.entityId);
           return (
-            <button
-              type="button"
-              key={c.entityId}
-              onClick={() => handleSelectChar(c)}
-              disabled={!hasSecret}
-              className={`w-full text-left flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all ${
-                isActive
-                  ? "bg-qi/10 border border-qi/25"
-                  : hasSecret
-                    ? "hover:bg-white/[0.03] border border-transparent"
-                    : "opacity-40 border border-transparent cursor-not-allowed"
-              }`}
-            >
-              <span className="text-xl">
-                {SPECIES.find((s) => s.id === c.species)?.icon || "🧔"}
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="text-sm font-bold text-slate-200 truncate">{c.name}</div>
-                <div className="text-[10px] text-slate-500">
-                  {REALM_NAMES[c.realm || 0] || "凡人"}
-                  {!hasSecret && " · 缺少私钥"}
+            <div key={c.entityId} className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => handleSelectChar(c)}
+                disabled={!hasSecret}
+                className={`flex-1 text-left flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all ${
+                  isActive
+                    ? "bg-qi/10 border border-qi/25"
+                    : hasSecret
+                      ? "hover:bg-white/[0.03] border border-transparent"
+                      : "opacity-40 border border-transparent cursor-not-allowed"
+                }`}
+              >
+                <span className="text-xl">
+                  {SPECIES.find((s) => s.id === c.species)?.icon || "🧔"}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-bold text-slate-200 truncate">{c.name}</div>
+                  <div className="text-[10px] text-slate-500">
+                    {REALM_NAMES[c.realm || 0] || "凡人"}
+                    {!hasSecret && " · 缺少私钥"}
+                  </div>
                 </div>
-              </div>
-              {isActive && (
-                <div className="w-1.5 h-1.5 rounded-full bg-qi shadow-[0_0_6px_rgba(56,189,248,0.6)]" />
-              )}
-            </button>
+                {isActive && (
+                  <div className="w-1.5 h-1.5 rounded-full bg-qi shadow-[0_0_6px_rgba(56,189,248,0.6)]" />
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => onRemove(c.entityId)}
+                title="释放控制"
+                className="p-1.5 text-slate-600 hover:text-danger transition-colors rounded-lg hover:bg-danger/10"
+              >
+                ✕
+              </button>
+            </div>
           );
         })}
       </div>

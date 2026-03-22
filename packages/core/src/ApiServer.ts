@@ -51,8 +51,13 @@ class RateLimiter {
   }
 }
 
-// 登录/注册: 每 IP 每分钟 10 次
-const authLimiter = new RateLimiter(60_000, 10);
+// 夺舍: 每 IP 每窗口最多 N 次 (可通过环境变量配置)
+const ATTACH_RATE_LIMIT_WINDOW_MS = parseInt(
+  process.env.ATTACH_RATE_LIMIT_WINDOW_MS ?? String(10 * 60 * 1000),
+  10,
+);
+const ATTACH_RATE_LIMIT_MAX = parseInt(process.env.ATTACH_RATE_LIMIT_MAX ?? "5", 10);
+const attachLimiter = new RateLimiter(ATTACH_RATE_LIMIT_WINDOW_MS, ATTACH_RATE_LIMIT_MAX);
 
 const MAX_BODY_SIZE = 1024 * 1024; // 1MB
 
@@ -83,20 +88,6 @@ export class ApiServer {
     });
 
     this.wss.on("connection", (ws, req) => {
-      // ── WebSocket 认证：需要 ?token=<jwt> 参数 ──
-      const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
-      const token = url.searchParams.get("token");
-      if (!token) {
-        ws.close(4401, "Authentication required");
-        return;
-      }
-      try {
-        this.bot.verifyToken(token);
-      } catch {
-        ws.close(4401, "Invalid token");
-        return;
-      }
-
       const addr = req.socket.remoteAddress;
       console.log(`[WS] Client connected from ${addr}, total=${this.clients.size + 1}`);
       this.clients.add(ws);
@@ -179,6 +170,7 @@ export class ApiServer {
       clearInterval(this.tickInterval);
       this.tickInterval = undefined;
     }
+    this.bot.stopInactivityCheck();
     return new Promise((r) => {
       this.wss.close();
       this.http.close(() => r());
@@ -322,6 +314,15 @@ export class ApiServer {
           );
         return this.world.reincarnate(id, name, species);
       }
+
+      if (parts[3] === "snapshot") {
+        const lastThoughts = (body.lastThoughts ?? []) as Array<{
+          tick: number;
+          innerVoice: string;
+          actions: string[];
+        }>;
+        return this.world.getContextSnapshot(id, lastThoughts);
+      }
     }
 
     if (method === "GET" && path.startsWith("/entity/")) {
@@ -401,62 +402,16 @@ export class ApiServer {
 
     if (method === "GET" && path === "/entities") return this.world.getAliveEntities();
 
-    // ── Auth 路由 ─────────────────────────────────────────
+    if (method === "GET" && path === "/relations") return this.world.relations.toJSON();
 
-    if (method === "POST" && path === "/auth/register") {
-      const ip = req.socket.remoteAddress ?? "unknown";
-      authLimiter.check(`register:${ip}`);
-      const { username, password, inviteCode } = body as {
-        username?: string;
-        password?: string;
-        inviteCode?: string;
-      };
-      if (!username) throw new ApiError("username is required");
-      if (!password) throw new ApiError("password is required");
-      if (!inviteCode) throw new ApiError("inviteCode is required");
-      return this.bot.register(username, password, inviteCode);
-    }
-
-    if (method === "POST" && path === "/auth/login") {
-      const ip = req.socket.remoteAddress ?? "unknown";
-      authLimiter.check(`login:${ip}`);
-      const { username, password } = body as {
-        username?: string;
-        password?: string;
-      };
-      if (!username || !password) throw new ApiError("username and password required");
-      return this.bot.userLogin(username, password);
-    }
-
-    if (method === "GET" && path === "/auth/me") {
-      const token = this.extractToken(req!);
-      if (!token) throw new ApiError("Missing Authorization token");
-      return this.bot.getUserInfo(token);
-    }
-
-    // ── Character 路由 ────────────────────────────────────
+    // ── Character 路由 (匿名夺舍) ──────────────────────────
 
     if (method === "POST" && path === "/char/attach") {
-      const token = this.extractToken(req!);
-      if (!token) throw new ApiError("Missing Authorization token");
+      const ip = req.socket.remoteAddress ?? "unknown";
+      attachLimiter.check(`attach:${ip}`);
       const { entityId, inviteCode } = body as { entityId?: string; inviteCode?: string };
       if (!entityId) throw new ApiError("entityId is required");
-      return this.bot.attachCharacterForUser(token, entityId, inviteCode);
-    }
-
-    if (method === "GET" && path === "/char/list") {
-      const token = this.extractToken(req!);
-      if (!token) throw new ApiError("Missing Authorization token");
-      const info = this.bot.getUserInfo(token);
-      return { characters: info.characters };
-    }
-
-    if (method === "POST" && path === "/char/delete") {
-      const token = this.extractToken(req!);
-      if (!token) throw new ApiError("Missing Authorization token");
-      const { entityId } = body as { entityId?: string };
-      if (!entityId) throw new ApiError("entityId is required");
-      return this.bot.deleteCharacterForUser(token, entityId);
+      return this.bot.anonymousAttach(entityId, inviteCode);
     }
 
     // ── Bot 路由 ─────────────────────────────────────────

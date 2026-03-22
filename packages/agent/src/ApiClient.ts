@@ -3,6 +3,8 @@
 // ============================================================
 
 import type { ActionId } from "@jindan/core";
+import type { ContextSnapshot } from "./snapshotTypes.js";
+import type { ThoughtRecord } from "./types.js";
 
 export class ApiClient {
   constructor(
@@ -33,6 +35,19 @@ export class ApiClient {
   /** 用私钥解析 entityId */
   resolveSecret(secret: string) {
     return this.request<{ entityId: string }>("POST", "/bot/resolve", { secret });
+  }
+
+  /** 获取语义化上下文快照（新 API，替代 observe + plan + memory） */
+  getSnapshot(id: string, lastThoughts: ThoughtRecord[] = []) {
+    // 转换 ThoughtRecord 为 Core 期望的格式
+    const coreThoughts = lastThoughts.map((t) => ({
+      tick: t.tick,
+      innerVoice: t.innerVoice,
+      actions: t.plan.map((p) => p.action),
+    }));
+    return this.request<ContextSnapshot>("POST", `/entity/${id}/snapshot`, {
+      lastThoughts: coreThoughts,
+    });
   }
 
   getObserve(id: string) {

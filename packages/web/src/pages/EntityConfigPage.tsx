@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { charAttach, type EntityData, getEntities } from "../api/client";
-import { useAuth } from "../context/AuthContext";
 
 const SPECIES = [
   { id: "human", icon: "🧔", label: "人族" },
@@ -24,13 +23,23 @@ const REALM_NAMES = [
 ];
 
 export default function EntityConfigPage() {
-  const { token, characters, addCharacter } = useAuth();
+  const navigate = useNavigate();
   const [entities, setEntities] = useState<EntityData[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [inviteCode, setInviteCode] = useState("");
   const [newSecret, setNewSecret] = useState<{ id: string; secret: string } | null>(null);
   const [attachingId, setAttachingId] = useState<string | null>(null);
+
+  // Load owned entity IDs from localStorage
+  const [ownedEntityIds, setOwnedEntityIds] = useState<Set<string>>(() => {
+    try {
+      const chars = JSON.parse(localStorage.getItem("jindan_characters") || "[]");
+      return new Set((chars as { entityId: string }[]).map((c) => c.entityId));
+    } catch {
+      return new Set();
+    }
+  });
 
   const fetchEntities = useCallback(async () => {
     try {
@@ -54,36 +63,47 @@ export default function EntityConfigPage() {
     setError("");
     setAttachingId(entityId);
     try {
-      const data = await charAttach(token!, entityId, inviteCode);
+      const data = await charAttach(entityId, inviteCode);
       setNewSecret({ id: entityId, secret: data.secret });
-      addCharacter({
-        entityId: data.entityId,
-        name: entityName,
-        species: species || "human",
-      });
-      // save to local storage
+
+      // Save character info to localStorage
+      const chars = JSON.parse(localStorage.getItem("jindan_characters") || "[]");
+      const newChar = { entityId: data.entityId, name: entityName, species: species || "human" };
+      const existing = chars.findIndex((c: { entityId: string }) => c.entityId === data.entityId);
+      if (existing >= 0) {
+        chars[existing] = newChar;
+      } else {
+        chars.push(newChar);
+      }
+      localStorage.setItem("jindan_characters", JSON.stringify(chars));
+
+      // Save secret
       const stored = JSON.parse(localStorage.getItem("jindan_secrets") || "{}");
       stored[data.entityId] = data.secret;
       localStorage.setItem("jindan_secrets", JSON.stringify(stored));
+
+      // Update local state
+      setOwnedEntityIds((prev) => new Set([...prev, data.entityId]));
     } catch (err) {
       setError(err instanceof Error ? err.message : "夺舍失败");
     }
     setAttachingId(null);
   }
 
-  const ownedEntityIds = new Set(characters.map((c) => c.entityId));
-
   return (
     <div className="min-h-screen bg-void text-slate-300 p-8 flex flex-col items-center overflow-y-auto">
       <div className="w-full max-w-5xl space-y-6 animate-fade-in">
         <div className="flex justify-between items-center bg-white/[0.02] p-4 rounded-xl border border-white/[0.05]">
           <h1 className="text-xl font-bold text-qi">大千生灵 - 万物化生</h1>
-          <Link
-            to="/"
-            className="text-sm border border-qi/30 text-qi px-4 py-2 rounded-lg hover:bg-qi/10 transition-colors"
-          >
-            返回控制台
-          </Link>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => navigate("/")}
+              className="text-sm border border-qi/30 text-qi px-4 py-2 rounded-lg hover:bg-qi/10 transition-colors"
+            >
+              返回控制台
+            </button>
+          </div>
         </div>
 
         {/* Creation Result Alert */}

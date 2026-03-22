@@ -35,31 +35,7 @@ async function request<T>(
   return data as T;
 }
 
-// ── Auth ────────────────────────────────────────────────
-
-export interface AuthResponse {
-  token: string;
-  user: { username: string };
-}
-
-export function authRegister(username: string, password: string, inviteCode: string) {
-  return request<AuthResponse>("POST", "/auth/register", { username, password, inviteCode });
-}
-
-export function authLogin(username: string, password: string) {
-  return request<AuthResponse>("POST", "/auth/login", { username, password });
-}
-
-export function authMe(token: string) {
-  return request<{ username: string; characters: CharacterInfo[] }>(
-    "GET",
-    "/auth/me",
-    undefined,
-    token,
-  );
-}
-
-// ── Characters ──────────────────────────────────────────
+// ── Characters (匿名夺舍) ───────────────────────────────
 
 export interface CharacterInfo {
   entityId: string;
@@ -72,21 +48,13 @@ export interface CharacterInfo {
   power?: number;
 }
 
-export function charAttach(token: string, entityId: string, inviteCode: string = "") {
+/** 匿名夺舍 — 无需登录，直接夺舍 */
+export function charAttach(entityId: string, inviteCode: string = "") {
   return request<{ entityId: string; secret: string; entity: Record<string, unknown> }>(
     "POST",
     "/char/attach",
     { entityId, inviteCode },
-    token,
   );
-}
-
-export function charList(token: string) {
-  return request<{ characters: CharacterInfo[] }>("GET", "/char/list", undefined, token);
-}
-
-export function charDelete(token: string, entityId: string) {
-  return request<{ success: boolean }>("POST", "/char/delete", { entityId }, token);
 }
 
 // ── Bot (Chat) ──────────────────────────────────────────
@@ -131,9 +99,7 @@ export interface EntityComponents {
     realm?: number;
     currentQi?: number;
   };
-  combat?: {
-    power?: number;
-  };
+
 }
 
 export interface EntityData {
@@ -146,9 +112,7 @@ export interface EntityData {
 
 export interface WorldStatus {
   tick?: number;
-  ambientPool?: {
-    pools?: Record<string, number>;
-  };
+  daoTanks?: Record<string, number>;
   entities?: EntityData[];
 }
 
@@ -170,6 +134,18 @@ export interface GraveyardGroup {
 
 export function getEntities() {
   return request<EntityData[]>("GET", "/entities");
+}
+
+// ── Relations ───────────────────────────────────────────
+
+export interface RelationEdge {
+  score: number;
+  tags: string[];
+}
+
+/** key format: "entityA:entityB" → RelationEdge */
+export function getRelations() {
+  return request<Record<string, RelationEdge>>("GET", "/relations");
 }
 
 export function getWorldStatus() {

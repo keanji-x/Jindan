@@ -49,11 +49,13 @@ function pickRandomTarget(
   entities: Entity[],
   minRelation: number,
   relations: { get: (a: string, b: string) => number },
+  sameSpeciesOnly: boolean = false,
 ): Entity | null {
   const candidates = entities.filter((e) => {
     if (e.id === actor.id) return false;
     if (e.status !== "alive") return false;
     if (e.species === "dao") return false;
+    if (sameSpeciesOnly && e.species !== actor.species) return false;
     const score = relations.get(actor.id, e.id);
     return score >= minRelation;
   });
@@ -99,7 +101,8 @@ export const NpcSocialSystem: GameSystem = {
       const chosen = pickWeightedOption(availableOptions);
 
       // Find a compatible target
-      const target = pickRandomTarget(npc, aliveNpcs, chosen.minRelation, relations);
+      const sameSpecies = chosen.actionId === "court";
+      const target = pickRandomTarget(npc, aliveNpcs, chosen.minRelation, relations, sameSpecies);
       if (!target) continue;
 
       // Execute the action via World.performAction

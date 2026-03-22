@@ -31,10 +31,13 @@ describe("BotService", () => {
       }),
       getSecret: vi.fn((id) => secrets[id]),
       getEntityIdBySecret: vi.fn((hash) => Object.keys(secrets).find((k) => secrets[k] === hash)),
-      removeEntity: vi.fn(),
+      removeEntity: vi.fn((id) => {
+        delete secrets[id];
+      }),
     };
 
     bot = new BotService(mockWorld as any, mockStorage as any);
+    bot.stopInactivityCheck(); // prevent timer leaks in tests
   });
 
   it("should register and login a user successfully", () => {
@@ -67,6 +70,51 @@ describe("BotService", () => {
     const authRes = bot.authenticate(charRes.secret);
     expect(authRes.token).toBeDefined();
     expect(authRes.entityId).toBe("e1");
+  });
+
+  it("should anonymous attach successfully", () => {
+    mockWorld.getEntity.mockReturnValue({
+      id: "e1",
+      name: "TestEntity",
+      species: "human",
+      status: "alive",
+      components: {},
+    });
+
+    const result = bot.anonymousAttach("e1");
+    expect(result.entityId).toBe("e1");
+    expect(result.secret).toBeDefined();
+    expect(result.secret).toMatch(/^jd_/);
+
+    // Should be able to authenticate with the secret
+    const authRes = bot.authenticate(result.secret);
+    expect(authRes.entityId).toBe("e1");
+  });
+
+  it("should release entity after inactivity check", () => {
+    mockWorld.getEntity.mockReturnValue({
+      id: "e1",
+      name: "TestEntity",
+      species: "human",
+      status: "alive",
+      components: { brain: { id: "external_llm" } },
+    });
+
+    const result = bot.anonymousAttach("e1");
+    expect(result.secret).toBeDefined();
+
+    // Simulate time passing beyond inactivity timeout
+    // Access private lastActivity map via any cast
+    const lastActivity = (bot as any).lastActivity as Map<string, number>;
+    lastActivity.set("e1", Date.now() - 31 * 60 * 1000); // 31 minutes ago
+
+    bot.checkInactivity();
+
+    // Entity should be released — secret removed
+    expect(mockStorage.removeEntity).toHaveBeenCalledWith("e1");
+    // Brain should be cleared
+    const entity = mockWorld.getEntity("e1");
+    expect(entity.components.brain).toBeUndefined();
   });
 
   it("should return theme messages if chatting with dead entity", async () => {

@@ -55,6 +55,10 @@ export interface Entity {
     mood?: MoodComponent;
     brain?: { id: string };
     actionGraph?: ActiveGraph;
+    /** LLM-generated emotion (瞬时情绪, 每轮更新) */
+    emotion?: { tag: string };
+    /** LLM-generated short-term goal (短期目标, 每轮更新) */
+    shortTermGoal?: { text: string };
   };
 }
 
@@ -135,6 +139,8 @@ export interface WorldEventRecord {
   targetId?: string; // 受击者/目标ID
   type: WorldEventRecordType; // 事件类型/边类型
   data?: Record<string, unknown>; // 事件附带的复式记账数据（如 qiCost, absorbed）
+  /** 是否为重大事件（长期记忆：突破/战斗/死亡/转世等） */
+  isMajor?: boolean;
 }
 
 /** 供外部查询的实体历史视图 */
