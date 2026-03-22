@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EventBus } from "../EventBus.js";
 import { UNIVERSE } from "../world/config/universe.config.js";
 import { executeDrain } from "../world/systems/handlers/drain.js";
+import { DAO_ENTITY_ID } from "../world/World.js";
 
 describe("DrainSystem", () => {
   let events: EventBus;
@@ -9,7 +10,6 @@ describe("DrainSystem", () => {
   beforeEach(() => {
     events = new EventBus();
     vi.spyOn(events, "emit");
-    // Mock the reactor logic and equations
     UNIVERSE.reactors["human"] = {
       id: "human",
       baseDrainRate: 10,
@@ -20,14 +20,23 @@ describe("DrainSystem", () => {
       birthCost: 50,
       absorbSource: "dao" as const,
       actions: ["meditate"],
-      ambientCapContribution: 50,
     } as any;
     UNIVERSE.drainBase = 1.0;
-    UNIVERSE.ecology.baseAmbientCap = 100;
+    UNIVERSE.drainScale = 1.0;
+    UNIVERSE.totalParticles = 10000;
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  /** Create a Dao entity for drain tests */
+  const makeDaoEntity = (ql = 5000, qs = 500) => ({
+    id: DAO_ENTITY_ID,
+    name: "天道",
+    species: "dao",
+    status: "alive" as const,
+    components: { tank: { tanks: { ql, qs }, coreParticle: "ql" } },
   });
 
   const runDrain = (entities: any[], ambientPool: any) => {
@@ -35,84 +44,62 @@ describe("DrainSystem", () => {
   };
 
   it("should skip non-alive entities", () => {
+    const dao = makeDaoEntity();
     const entity = { status: "lingering", components: { tank: {} } };
-    runDrain([entity], { pools: { ql: 0, qs: 0 } });
+    runDrain([dao, entity], { pools: { ql: 0, qs: 0 }, total: 10000 });
     expect(events.emit).not.toHaveBeenCalled();
   });
 
-  it("should drain core particle based on dissipation when no poison is in ambient", () => {
-    // 0 ambient poison, low ambient total -> high dissipation
-    // Math.exp(dissipationK * (1-density)) - 1
-    // Let's mock Math.exp to return 2
-    vi.spyOn(Math, "exp").mockReturnValue(2);
-
+  it("should drain core particle to Dao with linear dissipation", () => {
+    const dao = makeDaoEntity(100, 0);
     const entity = {
       id: "e1",
       name: "Tester",
       species: "human",
       status: "alive",
-      components: { tank: { tanks: { ql: 50, qs: 0 }, coreParticle: "ql" } },
+      components: { tank: { tanks: { ql: 5000, qs: 0 }, coreParticle: "ql" } },
     };
-    const ambientPool = { pools: { ql: 10, qs: 0 } }; // density = 0.1
 
-    runDrain([entity], ambientPool);
+    runDrain([dao, entity], { pools: dao.components.tank.tanks, total: 10000 });
 
-    // dissipation = floor(10 * 1 * 1) = 10
-    expect(entity.components.tank.tanks.ql).toBe(40);
-    // poison pool in ambient increases by dissipation = 10 -> qs becomes 10
-    expect(ambientPool.pools.qs).toBe(10);
+    // Linear dissipation: floor(baseDrain(10) × realmScale(1)) = 10
+    expect(entity.components.tank.tanks.ql).toBe(4990);
+    // Dissipated qi goes to Dao's tanks
+    expect(dao.components.tank.tanks.ql).toBe(110); // was 100, + 10
     expect(events.emit).toHaveBeenCalledWith(expect.objectContaining({ type: "entity_drained" }));
   });
 
-  it("should collapse entity and dump remaining particles if core reaches 0", () => {
-    vi.spyOn(Math, "exp").mockReturnValue(2); // dissipation = 10
-
+  it("should collapse entity and dump remaining particles to Dao if core reaches 0", () => {
+    const dao = makeDaoEntity(0, 0);
     const entity = {
       id: "e1",
       name: "Tester",
       species: "human",
       status: "alive",
-      components: { tank: { tanks: { ql: 5, qs: 5 }, coreParticle: "ql" } },
+      components: { tank: { tanks: { ql: 5, qs: 3 }, coreParticle: "ql" } },
     };
-    const ambientPool = { pools: { ql: 0, qs: 0 } };
 
-    runDrain([entity], ambientPool);
+    runDrain([dao, entity], { pools: dao.components.tank.tanks, total: 10000 });
 
-    // Initial qs = 0 in ambient, ql = 0. Dissipation drops core (ql) by 10 (capped by 5).
-    // so core drops to 0. It triggers collapse!
+    // dissipation = floor(10 * 1) = 10, but capped at coreQi = 5
+    // After dissipation: ql = 0 → collapse!
     expect(entity.status).toBe("lingering");
-    // All tank particles dumped
     expect(entity.components.tank.tanks.ql).toBe(0);
-    expect(entity.components.tank.tanks.qs).toBe(0);
-    // Ambient receives the dumped particles. Wait, qs was 5, ql was 0 (dissipated to ambient as qs instead).
-    // Let's not strict check the exact math here, just ensure it collapsed and dumped
+    expect(entity.components.tank.tanks.qs).toBe(0); // dumped to Dao
+    // Dao should have received: 5 (dissipated ql) + 3 (collapsed qs)
+    expect(dao.components.tank.tanks.ql).toBe(5);
+    expect(dao.components.tank.tanks.qs).toBe(3);
     expect(events.emit).toHaveBeenCalledWith(expect.objectContaining({ type: "entity_died" }));
   });
 
-  it("should process infiltration if there is poison in ambient AND detox is enabled", () => {
-    vi.spyOn(Math, "exp").mockImplementation((val) => (val === 0 ? 1 : 2)); // To force infiltration = 10 if val > 0
-    const entity = {
-      id: "e1",
-      name: "Tester",
-      species: "human",
-      status: "alive",
-      components: { tank: { tanks: { ql: 50, qs: 0 }, coreParticle: "ql" } },
-    };
-    const ambientPool = { pools: { ql: 0, qs: 100 } }; // 100% poison
+  it("should skip Dao entity itself (Dao doesn't drain to itself)", () => {
+    const dao = makeDaoEntity(5000, 500);
+    const daoQlBefore = dao.components.tank.tanks.ql;
 
-    // We need dissipation = 0 so Math.exp(dissipationK*(1-density)) = 1 -> Math.exp(0) = 1
-    // Actually our mock handles it by just checking what we pass. Let's just restoreMath.exp.
-    vi.restoreAllMocks();
-    vi.spyOn(events, "emit");
+    runDrain([dao], { pools: dao.components.tank.tanks, total: 10000 });
 
-    runDrain([entity], ambientPool);
-
-    // Infiltration should be > 0.
-    // Core drops, ambient poison drops, ambient poison regenerated x2.
-    // Ensure drained event fired.
-    const calls = (events.emit as any).mock.calls;
-    const drainedEvent = calls.find((c: any) => c[0].type === "entity_drained");
-    expect(drainedEvent).toBeDefined();
-    expect(drainedEvent[0].data.infiltration).toBeGreaterThan(0);
+    // Dao should NOT be drained
+    expect(dao.components.tank.tanks.ql).toBe(daoQlBefore);
+    expect(events.emit).not.toHaveBeenCalled();
   });
 });

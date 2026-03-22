@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ActionRegistry } from "../../systems/ActionRegistry.js";
 import type { AvailableAction } from "../../types.js";
 import { HeuristicOptimizerBrain } from "../heuristic.js";
@@ -11,11 +11,22 @@ describe("HeuristicOptimizerBrain", () => {
     { action: "breakthrough", description: "Breakthrough", possible: true },
   ];
 
+  // Force exploration-rate guard to always pass (Math.random() > EXPLORATION_RATE=0.2)
+  // so we always exercise the optimizer branch and keep tests deterministic.
+  beforeEach(() => {
+    vi.spyOn(Math, "random").mockReturnValue(0.9);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("should prefer breakthrough if available and qi is full", () => {
     const ctx: BrainContext = {
       qiCurrent: 100,
       qiMax: 100,
       qiRatio: 1,
+      mood: 0.5,
       recentEvents: [],
     };
     const decision = HeuristicOptimizerBrain.decide(mockActions, ctx);
@@ -23,10 +34,15 @@ describe("HeuristicOptimizerBrain", () => {
   });
 
   it("should prefer devour if qi is low and we can afford the cost", () => {
+    // Use brainDepth=1 (single-step lookahead) so devour's +40 qi gain
+    // clearly beats rest's +5. With depth=5, both actions score equally after
+    // N steps because qi gets capped at qiMax, so the tie-break is unpredictable.
     const ctx: BrainContext = {
       qiCurrent: 20,
       qiMax: 100,
       qiRatio: 0.2,
+      mood: 0.5,
+      brainDepth: 1,
       recentEvents: [],
     };
 
@@ -46,6 +62,7 @@ describe("HeuristicOptimizerBrain", () => {
       qiCurrent: 5,
       qiMax: 100,
       qiRatio: 0.05,
+      mood: 0.5,
       recentEvents: [],
     };
 
@@ -66,7 +83,5 @@ describe("HeuristicOptimizerBrain", () => {
 
     const decision = HeuristicOptimizerBrain.decide(actions, ctx);
     expect(decision?.action).toBe("rest");
-
-    vi.restoreAllMocks();
   });
 });

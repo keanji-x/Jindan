@@ -12,5 +12,4 @@ export const ArtifactReactor: ReactorTemplate = {
   baseDrainRate: 0.1,
   ownPolarity: { ql: 1.0, qs: 0.0 },
   actions: [REST],
-  ambientCapContribution: 500,
 };

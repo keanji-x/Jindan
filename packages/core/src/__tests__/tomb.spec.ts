@@ -19,11 +19,11 @@ describe("Tomb System (坟墓系统)", () => {
     const entity = world.getEntity(entityId)!;
     const tank = entity.components.tank!;
 
-    // Dump all particles back to ambient (simulate chain collapse)
-    const ambient = world.qiPool.state;
+    // Dump all particles back to Dao (simulate chain collapse)
+    const daoTanks = world.getDaoTanks();
     for (const [pid, amount] of Object.entries(tank.tanks)) {
       if (amount > 0) {
-        ambient.pools[pid] = (ambient.pools[pid] ?? 0) + amount;
+        daoTanks[pid] = (daoTanks[pid] ?? 0) + amount;
         tank.tanks[pid] = 0;
       }
     }

@@ -44,7 +44,17 @@ export const doChat: ActionResolver = (entity, _actionId, context) => {
         type: "adjust_relation",
         a: entity.id,
         b: context.target.id,
-        delta: 5,
+        delta: 15,
+      },
+      {
+        type: "adjust_mood",
+        entityId: entity.id,
+        delta: 0.05,
+      },
+      {
+        type: "adjust_mood",
+        entityId: context.target.id,
+        delta: 0.03,
       },
     ],
     messageSent: true,

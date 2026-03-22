@@ -15,7 +15,7 @@ export const MEDITATE: ActionDef = {
   id: "meditate",
   name: "打坐",
   description: "吐纳天地灵气，缓缓吸收灵气到体内",
-  qiCost: 3,
+  qiCost: 5,
   needsTarget: false,
 };
 
@@ -23,7 +23,7 @@ export const MOONLIGHT: ActionDef = {
   id: "moonlight",
   name: "吸纳月华",
   description: "吞吸天地精华，快速吸收大量灵气",
-  qiCost: 8,
+  qiCost: 10,
   needsTarget: false,
 };
 
@@ -31,7 +31,7 @@ export const PHOTOSYNTH: ActionDef = {
   id: "photosynth",
   name: "光合吐纳",
   description: "扎根大地，缓缓吸收天地灵气",
-  qiCost: 1,
+  qiCost: 5,
   needsTarget: false,
 };
 
@@ -47,7 +47,7 @@ export const BREAKTHROUGH: ActionDef = {
   id: "breakthrough",
   name: "突破",
   description: "冲击更高境界，消耗大量灵气",
-  qiCost: 30,
+  qiCost: 80,
   needsTarget: false,
   showProgress: (entity: Entity) => {
     const tankComp = entity.components.tank;
@@ -86,7 +86,7 @@ export const SPAWN_OFFSPRING: ActionDef = {
   id: "spawn_offspring",
   name: "分裂繁衍",
   description: "消耗自身灵气，分裂产生同种子实体",
-  qiCost: 20,
+  qiCost: 30,
   needsTarget: false,
   canExecute: (entity) => {
     const tankComp = entity.components.tank;
@@ -104,7 +104,7 @@ export const FOUND_SECT: ActionDef = {
   id: "found_sect",
   name: "开山立派",
   description: "消耗大量灵气创建宗门",
-  qiCost: 30,
+  qiCost: 100,
   needsTarget: false,
   canExecute: (entity) => {
     const tankComp = entity.components.tank;

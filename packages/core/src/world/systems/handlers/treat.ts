@@ -27,7 +27,17 @@ export const doTreat: ActionResolver = (entity, _actionId, context) => {
       type: "adjust_relation",
       a: entity.id,
       b: context.target.id,
-      delta: 10,
+      delta: 20,
+    },
+    {
+      type: "adjust_mood",
+      entityId: entity.id,
+      delta: 0.1,
+    },
+    {
+      type: "adjust_mood",
+      entityId: context.target!.id,
+      delta: 0.08,
     },
     {
       type: "emit_event",

@@ -21,7 +21,7 @@ import { World } from "../world/World.js";
 
 export interface WorldSnapshot {
   tick: number;
-  ambientPool: { pools: Record<string, number>; total: number };
+  daoTanks: Record<string, number>;
   entities: Entity[];
 }
 
@@ -156,7 +156,12 @@ export class TestHarness {
         const speciesLimit = reactor?.proportionLimit(realm) ?? 0.05;
         const qiMax = Math.floor(speciesLimit * UNIVERSE.totalParticles);
         const qiRatio = qiMax > 0 ? qiCurrent / qiMax : 0;
-        const decision = brain.decide(actions, { qiCurrent, qiMax, qiRatio });
+        const decision = brain.decide(actions, {
+          qiCurrent,
+          qiMax,
+          qiRatio,
+          mood: npc.components.mood?.value ?? 0.5,
+        });
         if (decision) {
           this.world.performAction(npc.id, decision.action, decision.targetId);
         }
@@ -287,12 +292,12 @@ export class TestHarness {
     return this;
   }
 
-  /** Assert ambient pool has no negative values */
+  /** Assert Dao tanks have no negative values */
   assertNoNegativeAmbient(): this {
     const snap = this.world.getSnapshot();
-    for (const [particleId, amount] of Object.entries(snap.ambientPool.pools)) {
+    for (const [particleId, amount] of Object.entries(snap.daoTanks)) {
       if (amount < 0) {
-        throw new Error(`Ambient pool ${particleId} is negative: ${amount}`);
+        throw new Error(`Dao tank ${particleId} is negative: ${amount}`);
       }
     }
     return this;
@@ -341,7 +346,7 @@ export class TestHarness {
     return {
       tick: currentTick,
       alive: { total: alive.length, ...speciesCounts },
-      ambient: { ...snap.ambientPool.pools },
+      ambient: { ...snap.daoTanks },
       eventCounts,
       topEntities,
     };

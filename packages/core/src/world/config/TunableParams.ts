@@ -1,88 +1,72 @@
 // ============================================================
-// TunableParams — 7-dimensional search space for world balance
+// TunableParams — 9-dimensional search space for world balance
 //
-// All params expressed as ratios. applyParams() patches UNIVERSE in-place.
+// All params map 1:1 to UniverseConfig fields.
+// applyParams() patches UNIVERSE in-place via direct assignment.
 // ============================================================
 
 import { UNIVERSE } from "./universe.config.js";
 
 export interface SearchParams {
-  /** Per-tick drain as fraction of birthCost. e.g. 0.01 → human drains ~0.5/tick */
-  drainRatio: number;
-  /** Breakthrough cost as fraction of birthCost × realm */
-  breakthroughCostRatio: number;
-  /** Base probability of breakthrough success */
-  breakthroughSuccessRate: number;
-  /** Spawn chance base for SpawnPool */
-  spawnBaseChance: number;
-  /** Plant respawn chance per tick when below minimum */
-  ecologyResilience: number;
-  /** Required qi proportion ratio to attempt breakthrough (e.g. 0.8 of proportionLimit) */
-  breakthroughThreshold: number;
+  // ── Drain (entity → Dao) ──
   /** Exponential base for realm-scaled drain (e.g. 1.5) */
   drainBase: number;
-  /** QS infiltration exp factor */
-  infiltrationK: number;
-  /** QL dissipation exp factor */
-  dissipationK: number;
+  /** Global drain multiplier applied to all species' baseDrainRate */
+  drainScale: number;
+
+  // ── Absorb (Dao → entity) ──
+  /** Global absorb multiplier applied to all species' absorbRate */
+  absorbScale: number;
+
+  // ── Breakthrough ──
+  /** Absolute qi cost per realm for breakthrough */
+  qiCostPerRealm: number;
+  /** Base probability of breakthrough success */
+  breakthroughSuccessRate: number;
+  /** Required qi proportion ratio to attempt breakthrough (e.g. 0.8 of proportionLimit) */
+  breakthroughThreshold: number;
+
+  // ── Ecology ──
+  /** Spawn chance base for SpawnPool */
+  spawnBaseChance: number;
 }
 
 export const PARAM_RANGES: Record<keyof SearchParams, [number, number]> = {
-  drainRatio: [0.005, 0.05],
-  breakthroughCostRatio: [0.2, 0.6],
-  breakthroughSuccessRate: [0.1, 0.6],
-  spawnBaseChance: [0.005, 0.05],
-  ecologyResilience: [0.2, 1.0],
-  breakthroughThreshold: [0.5, 0.95],
   drainBase: [1.2, 2.5],
-  infiltrationK: [0.5, 4],
-  dissipationK: [0.5, 4],
+  drainScale: [0.5, 2.0],
+  absorbScale: [0.5, 2.0],
+  qiCostPerRealm: [2, 20],
+  breakthroughSuccessRate: [0.1, 0.6],
+  breakthroughThreshold: [0.5, 0.95],
+  spawnBaseChance: [0.005, 0.05],
 };
 
 export const DEFAULT_PARAMS: SearchParams = {
-  drainRatio: 0.01,
-  breakthroughCostRatio: 0.4,
-  breakthroughSuccessRate: 0.25,
-  spawnBaseChance: 0.02,
-  ecologyResilience: 0.6,
-  breakthroughThreshold: 0.9,
-  drainBase: 1.5,
-  infiltrationK: 2,
-  dissipationK: 2,
+  drainBase: 1.66,
+  drainScale: 1.12,
+  absorbScale: 1.87,
+  qiCostPerRealm: 10.2,
+  breakthroughSuccessRate: 0.31,
+  breakthroughThreshold: 0.4,
+  spawnBaseChance: 0.021,
 };
 
-/** Apply search params to UNIVERSE config (mutates in-place) */
+/** Apply search params to UNIVERSE config (mutates in-place, 1:1 direct assignment) */
 export function applyParams(p: SearchParams): void {
-  // Drain: ratio × birthCost
-  for (const [species, reactor] of Object.entries(UNIVERSE.reactors)) {
-    const cap = reactor.birthCost || 50;
-    (UNIVERSE.reactors as Record<string, typeof reactor>)[species] = {
-      ...reactor,
-      baseDrainRate: Math.max(1, Math.round(cap * p.drainRatio)),
-    };
-  }
+  // Drain
+  UNIVERSE.drainBase = p.drainBase;
+  UNIVERSE.drainScale = p.drainScale;
+
+  // Absorb
+  UNIVERSE.absorbScale = p.absorbScale;
 
   // Breakthrough
-  const biologicalReactors = Object.values(UNIVERSE.reactors).filter(
-    (r) =>
-      r.id !== "sect" && r.id !== "artifact" && !r.id.startsWith("artifact_") && r.id !== "dao",
-  );
-
-  const averageCap =
-    biologicalReactors.reduce((sum, r) => sum + (r.birthCost || 50), 0) /
-    Math.max(1, biologicalReactors.length);
-
-  UNIVERSE.breakthrough.qiCostPerRealm = Math.round(averageCap * p.breakthroughCostRatio * 0.1);
+  UNIVERSE.breakthrough.qiCostPerRealm = p.qiCostPerRealm;
   UNIVERSE.breakthrough.minQiRatio = p.breakthroughThreshold;
   UNIVERSE.breakthrough.baseSuccessRate = p.breakthroughSuccessRate;
 
   // Ecology
   UNIVERSE.ecology.spawnBaseChance = p.spawnBaseChance;
-
-  // Drain: realm base + dual mechanism k
-  UNIVERSE.drainBase = p.drainBase;
-  UNIVERSE.infiltrationK = p.infiltrationK;
-  UNIVERSE.dissipationK = p.dissipationK;
 }
 
 /** Generate a neighbor by perturbing 1-2 random dims by ±10% */

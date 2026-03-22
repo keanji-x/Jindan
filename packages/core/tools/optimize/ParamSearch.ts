@@ -15,6 +15,10 @@ export interface AnnealOptions {
   alpha?: number;
   initialTemp?: number;
   coolingRate?: number;
+  /** Pre-populate this many entities */
+  entities?: number;
+  /** Particles per entity ratio */
+  particlesPerEntity?: number;
 }
 
 export interface AnnealResult {
@@ -35,7 +39,7 @@ export function anneal(opts: AnnealOptions): AnnealResult {
 
   let current = { ...DEFAULT_PARAMS };
   applyParams(current);
-  let currentScore = evaluateWorldRobust({ ticks: ticksPerTrial, runs: runsPerEval, alpha });
+  let currentScore = evaluateWorldRobust({ ticks: ticksPerTrial, runs: runsPerEval, alpha, entities: opts.entities, particlesPerEntity: opts.particlesPerEntity });
 
   let best = { ...current };
   let bestScore = { ...currentScore };
@@ -46,7 +50,7 @@ export function anneal(opts: AnnealOptions): AnnealResult {
   for (let i = 0; i < iterations; i++) {
     const candidate = perturb(current);
     applyParams(candidate);
-    const candidateScore = evaluateWorldRobust({ ticks: ticksPerTrial, runs: runsPerEval, alpha });
+    const candidateScore = evaluateWorldRobust({ ticks: ticksPerTrial, runs: runsPerEval, alpha, entities: opts.entities, particlesPerEntity: opts.particlesPerEntity });
 
     const delta = candidateScore.fitness - currentScore.fitness;
     const accepted = delta > 0 || Math.random() < Math.exp(delta / temp);

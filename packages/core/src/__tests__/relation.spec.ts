@@ -153,6 +153,6 @@ describe("RelationGraph (关系图)", () => {
 
     world.performAction(a.id, "chat", b.id, { message: "道友好" });
 
-    expect(world.relations.get(a.id, b.id)).toBe(5);
+    expect(world.relations.get(a.id, b.id)).toBe(15);
   });
 });

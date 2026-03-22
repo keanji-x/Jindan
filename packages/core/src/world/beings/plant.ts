@@ -1,25 +1,27 @@
 import type { ReactorTemplate } from "../config/types.js";
-import { CHAT } from "../systems/InteractionSystem.js";
+import { CHAT, COURT, MATE, TRAVEL, TREAT } from "../systems/InteractionSystem.js";
 import { BREAKTHROUGH, PHOTOSYNTH, REST, SPAWN_OFFSPRING } from "../systems/SingleEntitySystem.js";
 
-/** 灵植 — 以灵气 (QL) 为核心的植物 */
 export const PlantReactor: ReactorTemplate = {
   id: "plant",
   name: "灵植",
   coreParticle: "ql",
   proportionLimit: (realm) => 0.04 * realm,
-  birthCost: 30,
+  birthCost: 100,
   absorbSource: "dao",
-  baseDrainRate: 1,
+  baseDrainRate: 8,
   ownPolarity: { ql: 1.0, qs: 0.0 },
   actions: [
-    { ...PHOTOSYNTH, absorbRate: { base: 6, perRealm: 2 } },
+    { ...PHOTOSYNTH, absorbRate: { base: 45, perRealm: 15 } },
     BREAKTHROUGH,
     REST,
     CHAT,
+    COURT,
+    MATE,
     SPAWN_OFFSPRING,
+    TREAT,
+    TRAVEL,
   ],
-  ambientCapContribution: 100,
-  npcNames: ["碧灵草", "矮壮碧灵草", "幽光碧灵草", "簇生碧草", "变异碧草"],
+  npcNames: ["万年灵芝", "血藤", "幽冥花", "碧玉竹", "九转莲"],
   npcBrainId: "heuristic_optimizer",
 };

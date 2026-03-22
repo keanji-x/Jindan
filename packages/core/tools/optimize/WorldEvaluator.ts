@@ -5,7 +5,9 @@
 // Standalone tool — does NOT depend on vitest.
 // ============================================================
 
-import { AiRegistry } from "../../src/world/ai/AiRegistry.js";
+import { AiRegistry } from "../../src/world/brains/OptimizerRegistry.js";
+import { ActionRegistry } from "../../src/world/systems/ActionRegistry.js";
+import { UNIVERSE } from "../../src/world/config/universe.config.js";
 import { World } from "../../src/world/World.js";
 
 export interface WorldScore {
@@ -16,11 +18,16 @@ export interface WorldScore {
   ecosystemHealth: number;
   ambientEntityRatio: number;
   shaLingRatio: number;
+  actionDiversity: number;
 }
 
 export interface EvalOptions {
   ticks: number;
   maxIterations?: number;
+  /** Number of entities to pre-populate (default: let SpawnPool handle it) */
+  entities?: number;
+  /** Particles per entity ratio — totalParticles = entities × this (default: 100) */
+  particlesPerEntity?: number;
 }
 
 export interface RobustScore {
@@ -30,9 +37,38 @@ export interface RobustScore {
 }
 
 export function evaluateWorld(opts: EvalOptions): WorldScore {
+  // ── Temporarily scale world if requested ──
+  const origTotal = UNIVERSE.totalParticles;
+  const origMax = UNIVERSE.ecology.maxEntities;
+  if (opts.entities) {
+    const ppe = opts.particlesPerEntity ?? 100;
+    UNIVERSE.totalParticles = opts.entities * ppe;
+    UNIVERSE.ecology.maxEntities = opts.entities + 10;
+  }
+
   const world = new World();
   const player = world.createEntity("评测者", "human");
   const playerId = player.id;
+
+  // Pre-populate entities in balanced species mix
+  if (opts.entities) {
+    const npcSpecies = Object.entries(UNIVERSE.reactors)
+      .filter(([, r]) => r.npcNames && r.npcNames.length > 0)
+      .map(([id, r]) => ({ id, names: r.npcNames! }));
+
+    if (npcSpecies.length > 0) {
+      const count = opts.entities - 1; // -1 for player
+      for (let i = 0; i < count; i++) {
+        const sp = npcSpecies[i % npcSpecies.length]!;
+        const name = sp.names[i % sp.names.length]! + (i < sp.names.length ? "" : `#${i}`);
+        try {
+          world.createEntity(name, sp.id as any);
+        } catch {
+          break; // ambient pool exhausted
+        }
+      }
+    }
+  }
 
   const totalTicks = opts.ticks;
   const maxIter = opts.maxIterations ?? totalTicks * 20;
@@ -43,12 +79,14 @@ export function evaluateWorld(opts: EvalOptions): WorldScore {
   let breakthroughs = 0;
   let ambientEntitySum = 0;
   let shaLingSum = 0;
+  let actionDiversitySum = 0;
   let ticksSeen = 0;
+  const actionsThisTick = new Set<string>();
 
   const initialEntityCount = world.getAliveEntities().length;
 
   world.events.onAny((e) => {
-    if (e.type === "entity_breakthrough" && e.data.id === playerId) {
+    if (e.type === "entity_breakthrough") {
       breakthroughs++;
     }
   });
@@ -56,6 +94,7 @@ export function evaluateWorld(opts: EvalOptions): WorldScore {
   let iterations = 0;
   while (world.tick < totalTicks && iterations < maxIter) {
     iterations++;
+    actionsThisTick.clear();
 
     const npcs = world.getAliveEntities().filter((e) => e.components.brain);
 
@@ -69,22 +108,51 @@ export function evaluateWorld(opts: EvalOptions): WorldScore {
 
       const tank = npc.components.tank;
       const core = tank?.coreParticle ?? "ql";
-      const qiRatio = tank ? (tank.tanks[core] ?? 0) / (tank.maxTanks[core] ?? 1) : 0;
-      const decision = brain.decide(actions, { qiRatio });
-      if (decision) {
+      const qiCurrent = tank ? (tank.tanks[core] ?? 0) : 0;
+      const realm = npc.components.cultivation?.realm ?? 1;
+      const reactor = UNIVERSE.reactors[npc.species];
+      const qiMax = reactor
+        ? Math.floor(reactor.proportionLimit(realm) * UNIVERSE.totalParticles)
+        : 1;
+      const qiRatio = qiMax > 0 ? qiCurrent / qiMax : 0;
+      const brainCtx = { qiCurrent, qiMax, qiRatio, mood: npc.components.mood?.value ?? 0.5, brainDepth: reactor?.brainDepth };
+
+      const plan = brain.decidePlan
+        ? brain.decidePlan(actions, brainCtx)
+        : (() => { const d = brain.decide(actions, brainCtx); return d ? [d] : []; })();
+
+      for (const decision of plan) {
+        const current = world.getEntity(npc.id);
+        if (!current || current.status !== "alive") break;
         world.performAction(npc.id, decision.action, decision.targetId);
+        actionsThisTick.add(decision.action);
       }
     }
 
     const playerEntity = world.getEntity(playerId);
     if (playerEntity?.status === "alive") {
       const pActions = world.getAvailableActions(playerId);
-      const brk = pActions.find((a) => a.action === "breakthrough" && a.possible);
-      if (brk) {
-        world.performAction(playerId, "breakthrough");
-      } else {
-        const med = pActions.find((a) => a.action === "meditate" && a.possible);
-        if (med) world.performAction(playerId, "meditate");
+      const playerBrain = AiRegistry.get(playerEntity.components.brain?.id ?? "heuristic_optimizer");
+      if (playerBrain && pActions.length > 0) {
+        const pTank = playerEntity.components.tank;
+        const pCore = pTank?.coreParticle ?? "ql";
+        const pQi = pTank ? (pTank.tanks[pCore] ?? 0) : 0;
+        const pRealm = playerEntity.components.cultivation?.realm ?? 1;
+        const pReactor = UNIVERSE.reactors[playerEntity.species];
+        const pMax = pReactor ? Math.floor(pReactor.proportionLimit(pRealm) * UNIVERSE.totalParticles) : 1;
+        const pRatio = pMax > 0 ? pQi / pMax : 0;
+        const pCtx = { qiCurrent: pQi, qiMax: pMax, qiRatio: pRatio, mood: playerEntity.components.mood?.value ?? 0.5, brainDepth: pReactor?.brainDepth };
+
+        const pPlan = playerBrain.decidePlan
+          ? playerBrain.decidePlan(pActions, pCtx)
+          : (() => { const d = playerBrain.decide(pActions, pCtx); return d ? [d] : []; })();
+
+        for (const pDecision of pPlan) {
+          const current = world.getEntity(playerId);
+          if (!current || current.status !== "alive") break;
+          world.performAction(playerId, pDecision.action, pDecision.targetId);
+          actionsThisTick.add(pDecision.action);
+        }
       }
     }
 
@@ -96,21 +164,21 @@ export function evaluateWorld(opts: EvalOptions): WorldScore {
         ticksSeen++;
 
         const alive = world.getAliveEntities();
-        const plants = alive.filter((e) => e.species === "plant").length;
-        const beasts = alive.filter((e) => e.species === "beast").length;
         const playerAlive = alive.some((e) => e.id === playerId);
 
         if (playerAlive) playerAliveTicks++;
 
-        const minSpecies = Math.min(plants, beasts);
-        const maxSpecies = Math.max(plants, beasts);
-        diversitySum += maxSpecies > 0 ? minSpecies / maxSpecies : 0;
+        const uniqueSpecies = new Set(alive.map((e) => e.species)).size;
+        const totalSpeciesTypes = Object.keys(UNIVERSE.reactors).filter(
+          (k) => k !== "dao" && k !== "sect" && !k.startsWith("artifact"),
+        ).length;
+        diversitySum += totalSpeciesTypes > 0 ? Math.min(uniqueSpecies / totalSpeciesTypes, 1) : 0;
 
         ecosystemSum += alive.length / Math.max(initialEntityCount, 1);
 
         const snap = world.getSnapshot();
-        const ambientQl = snap.ambientPool.pools.ql ?? 0;
-        const ambientQs = snap.ambientPool.pools.qs ?? 0;
+        const ambientQl = snap.daoTanks.ql ?? 0;
+        const ambientQs = snap.daoTanks.qs ?? 0;
         const totalAmbient = ambientQl + ambientQs;
         let totalEntity = 0;
         for (const e of alive) {
@@ -122,6 +190,10 @@ export function evaluateWorld(opts: EvalOptions): WorldScore {
 
         const totalAmb = ambientQl + ambientQs;
         shaLingSum += totalAmb > 0 ? ambientQs / totalAmb : 0.5;
+
+        // Action diversity: unique actions this tick / total registered action types
+        const totalActionTypes = ActionRegistry.getAll().length || 1;
+        actionDiversitySum += actionsThisTick.size / totalActionTypes;
       }
     }
   }
@@ -135,18 +207,26 @@ export function evaluateWorld(opts: EvalOptions): WorldScore {
   const breakthroughRate = Math.min(breakthroughs / expectedBt, 1);
 
   const ambientEntityRatio = ambientEntitySum / actualTicks;
-  const ambientEntityScore = 1 - Math.abs(ambientEntityRatio - 0.5) * 2;
+  // 理想 ~70% ambient (环境是源池, 需要充足但不能垄断)
+  const ambientEntityScore = 1 - Math.min(Math.abs(ambientEntityRatio - 0.7) * 3, 1);
 
   const shaLingRatio = shaLingSum / actualTicks;
   const shaLingScore = 1 - Math.min(Math.abs(shaLingRatio - 0.4) * 3, 1);
 
+  const actionDiversity = actionDiversitySum / actualTicks;
+
   const total =
-    0.25 * playerSurvival +
-    0.2 * speciesDiversity +
-    0.2 * breakthroughRate +
-    0.15 * ecosystemHealth +
-    0.1 * ambientEntityScore +
-    0.1 * shaLingScore;
+    0.15 * playerSurvival +
+    0.10 * speciesDiversity +
+    0.15 * breakthroughRate +
+    0.05 * ecosystemHealth +
+    0.35 * actionDiversity +   // Core optimization target: action diversity
+    0.10 * ambientEntityScore +
+    0.10 * shaLingScore;
+
+  // ── Restore UNIVERSE ──
+  UNIVERSE.totalParticles = origTotal;
+  UNIVERSE.ecology.maxEntities = origMax;
 
   return {
     total,
@@ -156,6 +236,7 @@ export function evaluateWorld(opts: EvalOptions): WorldScore {
     ecosystemHealth,
     ambientEntityRatio,
     shaLingRatio,
+    actionDiversity,
   };
 }
 
@@ -175,6 +256,7 @@ export function evaluateWorldRobust(
     "ecosystemHealth",
     "ambientEntityRatio",
     "shaLingRatio",
+    "actionDiversity",
   ];
 
   const mean = {} as WorldScore;
