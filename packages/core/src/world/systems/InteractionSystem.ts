@@ -1,6 +1,7 @@
 import type { GameSystem } from "./GameSystem.js";
 import { doAcquire } from "./handlers/acquire.js";
 import { doChat } from "./handlers/chat.js";
+import { doChatReply } from "./handlers/chat_reply.js";
 import { doCourt } from "./handlers/court.js";
 import { doDevour } from "./handlers/devour.js";
 import { doEnslave } from "./handlers/enslave.js";
@@ -16,6 +17,8 @@ const interactionResolver: ActionResolver = (entity, actionId, context) => {
       return doDevour(entity, actionId, context);
     case "chat":
       return doChat(entity, actionId, context);
+    case "chat_reply":
+      return doChatReply(entity, actionId, context);
     case "court":
       return doCourt(entity, actionId, context);
     case "acquire":
@@ -58,6 +61,15 @@ export const CHAT: ActionDef = {
   qiCost: 5,
   needsTarget: true,
   relationRange: [-80, 100],
+};
+
+export const CHAT_REPLY: ActionDef = {
+  id: "chat_reply",
+  name: "回信",
+  description: "回复信箱中最旧的未读传音（world 内部 cascade 机制，Agent 不应直接调用）",
+  qiCost: 2,
+  needsTarget: false,
+  internalOnly: true, // LLM Agent 有自己的主动回复，不需要这个
 };
 
 export const COURT: ActionDef = {
@@ -133,6 +145,6 @@ export const TRAVEL: ActionDef = {
 export const InteractionSystem: GameSystem = {
   id: "interaction",
   name: "双边交互系统",
-  actions: [DEVOUR, CHAT, COURT, ACQUIRE, ENSLAVE, MATE, RECRUIT, TREAT, TRAVEL],
+  actions: [DEVOUR, CHAT, CHAT_REPLY, COURT, ACQUIRE, ENSLAVE, MATE, RECRUIT, TREAT, TRAVEL],
   handler: interactionResolver,
 };

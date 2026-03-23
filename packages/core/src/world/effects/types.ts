@@ -8,7 +8,7 @@
 // ============================================================
 
 import type { ParticleId } from "../config/types.js";
-import type { LifeStatus, RelationTag, WorldEvent } from "../types.js";
+import type { ChatMessage, LifeStatus, RelationTag, WorldEvent } from "../types.js";
 
 // ── Effect Types ─────────────────────────────────────────────
 
@@ -117,6 +117,13 @@ export interface AdjustMoodEffect {
   readonly delta: number;
 }
 
+/** Push a chat message into an entity's mailbox */
+export interface PushMailboxEffect {
+  readonly type: "push_mailbox";
+  readonly targetId: string;
+  readonly message: ChatMessage;
+}
+
 /** Union of all effect types */
 export type Effect =
   | TransferEffect
@@ -131,7 +138,8 @@ export type Effect =
   | AddRelationTagEffect
   | RemoveRelationTagEffect
   | CreateEntityEffect
-  | AdjustMoodEffect;
+  | AdjustMoodEffect
+  | PushMailboxEffect;
 
 // ── ActionOutcome ────────────────────────────────────────────
 

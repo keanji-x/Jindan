@@ -38,6 +38,29 @@ export interface MoodComponent {
   value: number;
 }
 
+/** 信箱消息 */
+export interface ChatMessage {
+  id: string;
+  tick: number;
+  fromId: string;
+  fromName: string;
+  message: string;
+  read: boolean;
+  /** 是否为回复消息（回复不触发自动回复，防止无限 ping-pong） */
+  isReply?: boolean;
+}
+
+/** 组件：信箱 (异步传音队列) */
+export interface MailboxComponent {
+  messages: ChatMessage[];
+}
+
+/** 组件：大脑 */
+export interface BrainComponent {
+  id: string; // "template" | "llm" | "external_llm"
+  replyMode: "auto" | "manual"; // auto = brain自动回复, manual = 等待外部
+}
+
 /** 世界中的一个生灵 (reactor) */
 export interface Entity {
   id: string;
@@ -53,7 +76,8 @@ export interface Entity {
     tank?: TankComponent;
     cultivation?: CultivationComponent;
     mood?: MoodComponent;
-    brain?: { id: string };
+    brain?: BrainComponent;
+    mailbox?: MailboxComponent;
     actionGraph?: ActiveGraph;
     /** LLM-generated emotion (瞬时情绪, 每轮更新) */
     emotion?: { tag: string };

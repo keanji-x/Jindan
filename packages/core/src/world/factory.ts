@@ -55,7 +55,7 @@ export function createEntity(name: string, species: string, options: SpawnOption
       tank: { tanks, coreParticle: reactor.coreParticle },
       cultivation: { realm },
       mood: { value: 0.5 },
-      ...(brainId ? { brain: { id: brainId } } : {}),
+      ...(brainId ? { brain: { id: brainId, replyMode: "auto" as const } } : {}),
     },
   };
 

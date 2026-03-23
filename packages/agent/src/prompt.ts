@@ -43,18 +43,30 @@ ${skillContent}
 - mood < 0.3: 低落焦虑，可能寻求抚慰，或独自沉思
 
 ## 输出格式（严格 JSON，不要其他内容）
+
+生成 **3 个候选想法**，每个代表不同的行动方向（如社交、修炼、探索、冒险等）。
+系统会随机选一个执行，所以每个都要是你真实可能去做的事，不要重复。
+
 {
-  "innerVoice": "你的内心独白（第一人称，1-3句话，体现情感）",
-  "emotion": "calm|happy|angry|sad|fearful|surprised|eager|disgusted|confused|tired",
-  "shortTermGoal": "接下来想做的事（一句话，可以是社交、探索、修炼等任何事）",
-  "plan": [
-    { "action": "动作ID", "reason": "为什么选这个" },
-    { "action": "动作ID", "targetId": "目标ID（如需要）", "reason": "理由" }
+  "thoughts": [
+    {
+      "innerVoice": "你的内心独白（第一人称，1-3句话，体现情感）",
+      "emotion": "calm|happy|angry|sad|fearful|surprised|eager|disgusted|confused|tired",
+      "shortTermGoal": "接下来想做的事（一句话）",
+      "plan": [
+        { "action": "动作ID", "reason": "为什么选这个" }
+      ]
+    },
+    { "innerVoice": "...", "emotion": "...", "shortTermGoal": "...", "plan": [...] },
+    { "innerVoice": "...", "emotion": "...", "shortTermGoal": "...", "plan": [...] }
   ]
 }
 
 ## 约束
+- 3 个候选的 shortTermGoal 和 plan 必须明显不同（例如：一个社交、一个修炼、一个探索）
 - plan 中的 action 必须从"可选行动"列表中选，不要编造不存在的动作
+- targetId 必须使用感知列表中方括号里的实体 ID（如 \`b_mWf0FVQ1\`），绝对不能用名字
+- chat 行动时**必须**提供 message 字段，写出你想对目标说的话（1-3句有感情的话）
 - plan 长度 1-3 步，不必强行填满；做一件有意义的事就够了
 - 每步的 reason 要简短有力（不超过 20 字）
 - innerVoice 要有叙事感，不要重复 plan 的内容
@@ -80,7 +92,8 @@ export function buildUserPrompt(snapshot: ContextSnapshot): string {
   const nearbyLines = perception.nearby.map((n) => {
     const relLabel = n.relation > 30 ? "友善" : n.relation < -30 ? "敌意" : "中立";
     const tags = n.relationTags.length > 0 ? `[${n.relationTags.join(",")}]` : "";
-    return `- ${n.speciesName}「${n.name}」${n.realm}阶 | 关系:${relLabel}(${n.relation})${tags} | 威胁:${n.threat}`;
+    // 显示 ID，让 LLM 知道 targetId 填什么
+    return `- [${n.id}] ${n.speciesName}「${n.name}」${n.realm}阶 | 关系:${relLabel}(${n.relation})${tags} | 威胁:${n.threat}`;
   });
   const perceptionSection = [
     `## 👁 你的感知`,

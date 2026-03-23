@@ -224,6 +224,16 @@ export class World {
     return this._tick;
   }
 
+  /** Alias for external callers (e.g. ApiServer) */
+  get currentTick(): number {
+    return this._tick;
+  }
+
+  /** Apply an effect from outside the action/effect pipeline (e.g. Agent chat reply) */
+  applyExternalEffect(effect: import("./effects/types.js").Effect): void {
+    this.applyEffect(effect);
+  }
+
   /** Returns the Dao entity's tanks — the universe's qi reservoir */
   getDaoTanks(): Record<string, number> {
     const dao = this.getEntity(DAO_ENTITY_ID);
@@ -777,6 +787,25 @@ export class World {
       const e = this.getEntity(effect.entityId);
       if (e?.components.mood) {
         e.components.mood.value = Math.max(0, Math.min(1, e.components.mood.value + effect.delta));
+      }
+    } else if (effect.type === "push_mailbox") {
+      const target = this.getEntity(effect.targetId);
+      if (target) {
+        if (!target.components.mailbox) {
+          target.components.mailbox = { messages: [] };
+        }
+        target.components.mailbox.messages.unshift(effect.message);
+        // Cap at 20 messages
+        if (target.components.mailbox.messages.length > 20) {
+          target.components.mailbox.messages.length = 20;
+        }
+        // 有 brain 且 replyMode 为 auto → 立即 cascade 回复（不等下个 tick）
+        // 只对非回复消息自动回复，防止无限 ping-pong
+        // （normalizeEntity 保证 replyMode 必定存在，无需兼容 undefined）
+        const brain = target.components.brain;
+        if (brain && brain.replyMode === "auto" && !effect.message.isReply) {
+          this.performAction(target.id, "chat_reply");
+        }
       }
     }
   }

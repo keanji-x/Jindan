@@ -16,11 +16,20 @@ export interface CycleRecord {
   actionResult: { success: boolean; error?: string; result?: unknown };
 }
 
+export interface ChatRecord {
+  ts: string;         // ISO timestamp
+  chatId: string;
+  incomingMessage: string;
+  llmReply: string;
+}
+
 export class ChatLogger {
   readonly records: CycleRecord[] = [];
+  readonly chatRecords: ChatRecord[] = [];
   private readonly logDir: string;
   private readonly jsonPath: string;
   private readonly mdPath: string;
+  private readonly chatMdPath: string;
 
   constructor(
     private readonly agentId: string,
@@ -32,11 +41,18 @@ export class ChatLogger {
     }
     this.jsonPath = path.join(this.logDir, `${this.agentId}-chat.json`);
     this.mdPath = path.join(this.logDir, `${this.agentId}-chat.md`);
+    this.chatMdPath = path.join(this.logDir, `${this.agentId}-conversations.md`);
   }
 
   push(record: CycleRecord) {
     this.records.push(record);
     this.flush();
+  }
+
+  /** 记录一次完整的 chat 问答 */
+  pushChat(record: ChatRecord) {
+    this.chatRecords.push(record);
+    this.flushChat();
   }
 
   get recordCount(): number {
@@ -61,5 +77,23 @@ export class ChatLogger {
       lines.push("");
     }
     fs.writeFileSync(this.mdPath, lines.join("\n"));
+  }
+
+  private flushChat() {
+    const lines: string[] = [`# 对话记录: ${this.agentId}\n`];
+    for (const r of this.chatRecords) {
+      lines.push(`## ${r.ts}`);
+      lines.push(`**chatId**: \`${r.chatId}\``);
+      lines.push(``);
+      lines.push(`**📨 收到**:`);
+      lines.push(`> ${r.incomingMessage}`);
+      lines.push(``);
+      lines.push(`**💬 回复**:`);
+      lines.push(`> ${r.llmReply}`);
+      lines.push(``);
+      lines.push(`---`);
+      lines.push(``);
+    }
+    fs.writeFileSync(this.chatMdPath, lines.join("\n"));
   }
 }

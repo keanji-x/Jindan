@@ -1,5 +1,5 @@
 import type { ReactorTemplate } from "../config/types.js";
-import { CHAT, COURT, DEVOUR, MATE, TRAVEL, TREAT } from "../systems/InteractionSystem.js";
+import { CHAT, CHAT_REPLY, COURT, DEVOUR, MATE, TRAVEL, TREAT } from "../systems/InteractionSystem.js";
 import { BREAKTHROUGH, MOONLIGHT, REST, SPAWN_OFFSPRING } from "../systems/SingleEntitySystem.js";
 
 export const BeastReactor: ReactorTemplate = {
@@ -17,6 +17,7 @@ export const BeastReactor: ReactorTemplate = {
     BREAKTHROUGH,
     REST,
     CHAT,
+    CHAT_REPLY,
     COURT,
     MATE,
     SPAWN_OFFSPRING,

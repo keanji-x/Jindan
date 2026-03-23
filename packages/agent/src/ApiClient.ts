@@ -68,11 +68,12 @@ export class ApiClient {
 
   // ── Unified Action ─────────────────────────────────────
 
-  performAction(entityId: string, action: ActionId, targetId?: string) {
+  performAction(entityId: string, action: ActionId, targetId?: string, payload?: unknown) {
     return this.request<Record<string, unknown>>("POST", "/action", {
       entityId,
       action,
       targetId,
+      payload,
     });
   }
 
@@ -107,7 +108,7 @@ export class ApiClient {
   heartbeat(entityId: string) {
     return this.request<{
       ok: boolean;
-      pendingChats: Array<{ chatId: string; message: string }>;
+      pendingChats: Array<{ chatId: string; message: string; fromId?: string; fromName?: string }>;
     }>("POST", "/agent/heartbeat", { entityId });
   }
 

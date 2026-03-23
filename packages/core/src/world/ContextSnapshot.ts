@@ -9,6 +9,7 @@ import { UNIVERSE } from "./config/universe.config.js";
 import type { AvailableAction, Entity, WorldEventRecord } from "./types.js";
 import type { World } from "./World.js";
 import { DAO_ENTITY_ID } from "./World.js";
+import { ActionRegistry } from "./systems/ActionRegistry.js";
 
 // ── Types ──────────────────────────────────────────────────
 
@@ -253,8 +254,12 @@ export function buildContextSnapshot(
   };
 
   // ── Options ──
+  // 过滤掉 internalOnly 的内部 action（如 chat_reply），不暴露给 Agent LLM
   const options: OptionsBlock = {
-    actions: world.getAvailableActions(entityId),
+    actions: world.getAvailableActions(entityId).filter((a) => {
+      const def = ActionRegistry.get(a.action);
+      return !def?.internalOnly;
+    }),
   };
 
   // ── Hints ──

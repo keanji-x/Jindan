@@ -61,6 +61,10 @@ function pushThought(thought: ThoughtRecord) {
 // ChatHandler 共享 thoughtBuffer 引用
 const chatHandler = new ChatHandler(api, llm, thoughtBuffer);
 
+// ChatLogger — 记录完整对话内容
+// entityId 还不确定，等 main() 里单例化时用 entityId 初始化
+let chatLogger: InstanceType<typeof ChatLogger> | null = null;
+
 async function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -83,19 +87,16 @@ const EPITAPH_PROMPT = `
 
 // ── DecisionPacket 解析 ──────────────────────────────────
 
-function parseDecision(raw: string): DecisionPacket {
-  const parsed = JSON.parse(raw);
-
-  // 验证 emotion
-  const emotion = (EMOTION_TAGS as readonly string[]).includes(parsed.emotion)
-    ? parsed.emotion
+function parseSingleDecision(parsed: Record<string, unknown>): DecisionPacket {
+  const emotion = (EMOTION_TAGS as readonly string[]).includes(parsed.emotion as string)
+    ? (parsed.emotion as DecisionPacket["emotion"])
     : "calm";
 
-  // 验证 plan
   const plan = Array.isArray(parsed.plan)
     ? parsed.plan.map((step: Record<string, unknown>) => ({
         action: String(step.action ?? ""),
         targetId: step.targetId ? String(step.targetId) : undefined,
+        message: step.message ? String(step.message) : undefined,
         reason: String(step.reason ?? ""),
       }))
     : [];
@@ -106,6 +107,30 @@ function parseDecision(raw: string): DecisionPacket {
     shortTermGoal: String(parsed.shortTermGoal ?? ""),
     plan,
   };
+}
+
+function parseDecision(raw: string): DecisionPacket {
+  const parsed = JSON.parse(raw);
+
+  // 新格式：{ thoughts: [...] } — 随机抽一个
+  if (Array.isArray(parsed.thoughts) && parsed.thoughts.length > 0) {
+    const idx = Math.floor(Math.random() * parsed.thoughts.length);
+    const chosen = parseSingleDecision(parsed.thoughts[idx] as Record<string, unknown>);
+    console.log(
+      `[AgentLoop] 🎲 从 ${parsed.thoughts.length} 个候选想法中选了第 ${idx + 1} 个: "${chosen.shortTermGoal}"`
+    );
+    // 把其他候选打印出来方便调试
+    for (let i = 0; i < parsed.thoughts.length; i++) {
+      if (i !== idx) {
+        const alt = parsed.thoughts[i] as Record<string, unknown>;
+        console.log(`[AgentLoop]    候选${i + 1}(未选): "${String(alt.shortTermGoal ?? "")}"`);
+      }
+    }
+    return chosen;
+  }
+
+  // 兼容旧格式：单个 DecisionPacket
+  return parseSingleDecision(parsed as Record<string, unknown>);
 }
 
 // ============================================================
@@ -126,7 +151,7 @@ function startHeartbeatLoop(entityId: string) {
       for (const chat of pendingChats) {
         console.log(`[Heartbeat] 📩 收到用户聊天 (chatId=${chat.chatId}): "${chat.message}"`);
         try {
-          const result = await chatHandler.handle(entityId, chat.message);
+          const result = await chatHandler.handle(entityId, chat.message, chat.fromName, chat.fromId);
           await api.chatReply(
             chat.chatId,
             result.reply,
@@ -134,6 +159,16 @@ function startHeartbeatLoop(entityId: string) {
             result.entityStatus,
           );
           console.log(`[Heartbeat] ✅ 回复已发送 (chatId=${chat.chatId})`);
+          console.log(`[Heartbeat] 💬 回复内容: "${result.reply}"`);
+
+          // 持久化对话到日志
+          chatLogger?.pushChat({
+            ts: new Date().toISOString(),
+            chatId: chat.chatId,
+            incomingMessage: chat.message,
+            llmReply: result.reply,
+          });
+
         } catch (err) {
           console.error(
             `[Heartbeat] ❌ Chat 处理失败:`,
@@ -166,6 +201,7 @@ async function loop(startId: string, name: string, species: string) {
   const id = startId;
   console.log(`\n\n[AgentLoop] Starting loop for Agent ID: ${id}`);
   let logger = new ChatLogger(id, path.resolve(__dirname, "../../logs"));
+  chatLogger = logger; // 让心跳回调可以访问
   let cycle = 0;
 
   // 启动独立的心跳循环
@@ -234,6 +270,7 @@ ${lifeStatus.life.article || "（无前世记忆，这是第一世）"}
           if (reinResult.success) {
             // entityId 不变，心跳无需重启
             logger = new ChatLogger(id, path.resolve(__dirname, "../../logs"));
+            chatLogger = logger; // 转世后更新全局引用
             chatHandler.clearHistory(id);
             thoughtBuffer.length = 0; // 清空工作记忆
             cycle = 0;
@@ -298,15 +335,31 @@ ${lifeStatus.life.article || "（无前世记忆，这是第一世）"}
       for (const step of decision.plan) {
         if (!step.action) continue;
         try {
+          // chat 行动时用 message 作为 payload
+          const payload = step.message ? { message: step.message } : undefined;
           console.log(
             `[AgentLoop] -> Executing: ${step.action}${step.targetId ? ` → ${step.targetId}` : ""} (${step.reason})`,
           );
-          const result = await api.performAction(id, step.action as ActionId, step.targetId);
+          if (step.action === "chat" && step.message) {
+            console.log(`[AgentLoop]    💬 传音内容: "${step.message}"`);
+          }
+          const result = await api.performAction(id, step.action as ActionId, step.targetId, payload);
           const success = Boolean(result.success);
           outcomes.push({ action: step.action, success });
           console.log(
             `[AgentLoop]    ${success ? "✅" : "❌"} ${step.action}: ${success ? "成功" : (result.error ?? "失败")}`,
           );
+
+          // 打印 chat 事件（传音内容 + 对方回复）
+          if (success && Array.isArray(result.events)) {
+            for (const evt of result.events as Array<Record<string, unknown>>) {
+              if (evt.type === "entity_chat") {
+                const summary = String(evt.summary ?? evt.message ?? "");
+                if (summary) console.log(`[AgentLoop]    📨 ${summary}`);
+              }
+            }
+          }
+
           if (!success) {
             console.log(`[AgentLoop]    Plan 中止（行动失败）`);
             break;

@@ -8,6 +8,7 @@
 import type { ReactorTemplate } from "../world/config/types.js";
 import type { Entity, QiPoolState, RelationData, WorldEventRecord } from "../world/types.js";
 import type { StorageBackend, UserRecord } from "./StorageBackend.js";
+import { normalizeEntity } from "./normalizeEntity.js";
 
 // Dynamic import to avoid hard dependency when using MemoryStorage
 let pg: typeof import("pg") | undefined;
@@ -439,7 +440,7 @@ export class PgStorage implements StorageBackend {
         },
         components: row.components ?? {},
       };
-      this.entities.set(entity.id, entity);
+      this.entities.set(entity.id, normalizeEntity(entity));
     }
 
     // Load events (most recent window only)
