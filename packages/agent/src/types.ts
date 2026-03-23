@@ -14,7 +14,7 @@ export interface DecisionPacket {
 export interface PlanStep {
   action: string;
   targetId?: string;
-  message?: string;  // chat 时的消息内容
+  message?: string; // chat 时的消息内容
   reason: string;
 }
 

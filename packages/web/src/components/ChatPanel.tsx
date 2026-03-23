@@ -33,7 +33,7 @@ export default function ChatPanel({ entityId, secret, characterName }: Props) {
         addMessage("system", `已连接 ${characterName} 的潜意识。`);
       })
       .catch((err) => {
-        setError(`连接失败: ${err.message}`);
+        setError(`连接失败: ${err.message}。私钥可能已过期，请前往「探索大千」重新夺舍。`);
       });
   }, [entityId, secret, characterName]);
 

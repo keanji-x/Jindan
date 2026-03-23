@@ -72,8 +72,8 @@ export class ChatHandler {
   async handle(
     entityId: string,
     userMessage: string,
-    fromName?: string,  // 发送方名字
-    fromId?: string,    // 发送方实体 ID（信笱消息才有）
+    fromName?: string, // 发送方名字
+    fromId?: string, // 发送方实体 ID（信笱消息才有）
   ): Promise<{
     reply: string;
     suggestedActions: Array<{ action: string; targetId?: string; description: string }>;
@@ -101,9 +101,8 @@ export class ChatHandler {
     // ── 构建完整 prompt ─────────────────────────────
     const chatLines = history.map((m) => `${m.role === "user" ? "用户" : "潜意识"}: ${m.content}`);
     // 发送方提示：名字(id) 格式，让 LLM 知道是谁在和自己说话，且能用 id 作为行动目标
-    const senderLabel = fromName && fromId
-      ? `${fromName}(${fromId})`
-      : (fromName ?? fromId ?? null);
+    const senderLabel =
+      fromName && fromId ? `${fromName}(${fromId})` : (fromName ?? fromId ?? null);
     const senderHint = senderLabel ? `（以下是 ${senderLabel} 发送的传音）` : "";
     const userPrompt = `${contextBlock}\n\n## 对话${senderHint}\n${chatLines.join("\n\n")}`;
 

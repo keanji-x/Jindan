@@ -196,6 +196,7 @@ export type WorldEventType =
   | "entity_spawned_offspring"
   | "entity_sect_founded"
   | "entity_recruited"
+  | "entity_released"
   | "tick_complete"
   | "system_warning"
   | "report";

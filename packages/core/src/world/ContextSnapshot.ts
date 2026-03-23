@@ -6,10 +6,10 @@
 // ============================================================
 
 import { UNIVERSE } from "./config/universe.config.js";
+import { ActionRegistry } from "./systems/ActionRegistry.js";
 import type { AvailableAction, Entity, WorldEventRecord } from "./types.js";
 import type { World } from "./World.js";
 import { DAO_ENTITY_ID } from "./World.js";
-import { ActionRegistry } from "./systems/ActionRegistry.js";
 
 // ── Types ──────────────────────────────────────────────────
 

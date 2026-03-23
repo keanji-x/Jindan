@@ -62,7 +62,14 @@ describe("Chat Instant Reply (Mailbox)", () => {
 
     const replyMsg = (reply!.data as Record<string, unknown>).message as string;
     const friendlyPhrases = [
-      "天气", "好啊", "来得正好", "道友", "灵气充盈", "心情甚好", "找我", "在此",
+      "天气",
+      "好啊",
+      "来得正好",
+      "道友",
+      "灵气充盈",
+      "心情甚好",
+      "找我",
+      "在此",
     ];
     const isFriendly = friendlyPhrases.some((p) => replyMsg.includes(p));
     expect(isFriendly).toBe(true);

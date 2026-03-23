@@ -117,7 +117,7 @@ function parseDecision(raw: string): DecisionPacket {
     const idx = Math.floor(Math.random() * parsed.thoughts.length);
     const chosen = parseSingleDecision(parsed.thoughts[idx] as Record<string, unknown>);
     console.log(
-      `[AgentLoop] 🎲 从 ${parsed.thoughts.length} 个候选想法中选了第 ${idx + 1} 个: "${chosen.shortTermGoal}"`
+      `[AgentLoop] 🎲 从 ${parsed.thoughts.length} 个候选想法中选了第 ${idx + 1} 个: "${chosen.shortTermGoal}"`,
     );
     // 把其他候选打印出来方便调试
     for (let i = 0; i < parsed.thoughts.length; i++) {
@@ -151,7 +151,12 @@ function startHeartbeatLoop(entityId: string) {
       for (const chat of pendingChats) {
         console.log(`[Heartbeat] 📩 收到用户聊天 (chatId=${chat.chatId}): "${chat.message}"`);
         try {
-          const result = await chatHandler.handle(entityId, chat.message, chat.fromName, chat.fromId);
+          const result = await chatHandler.handle(
+            entityId,
+            chat.message,
+            chat.fromName,
+            chat.fromId,
+          );
           await api.chatReply(
             chat.chatId,
             result.reply,
@@ -168,7 +173,6 @@ function startHeartbeatLoop(entityId: string) {
             incomingMessage: chat.message,
             llmReply: result.reply,
           });
-
         } catch (err) {
           console.error(
             `[Heartbeat] ❌ Chat 处理失败:`,
@@ -343,7 +347,12 @@ ${lifeStatus.life.article || "（无前世记忆，这是第一世）"}
           if (step.action === "chat" && step.message) {
             console.log(`[AgentLoop]    💬 传音内容: "${step.message}"`);
           }
-          const result = await api.performAction(id, step.action as ActionId, step.targetId, payload);
+          const result = await api.performAction(
+            id,
+            step.action as ActionId,
+            step.targetId,
+            payload,
+          );
           const success = Boolean(result.success);
           outcomes.push({ action: step.action, success });
           console.log(

@@ -281,7 +281,15 @@ export class BotService {
     const entity = this.world.getEntity(entityId);
     if (entity?.components.brain?.id === "external_llm") {
       delete entity.components.brain;
+      this.world.setEntity(entity); // 持久化 brain 清除，防止重启回退
     }
+    // 广播释放事件，让 WebSocket 客户端清理 localStorage
+    this.world.events.emit({
+      tick: this.world.currentTick,
+      type: "entity_released",
+      data: { entityId },
+      message: `实体 ${entityId} 因不活跃被释放`,
+    });
   }
 
   // ================================================================
@@ -460,8 +468,67 @@ export class BotService {
     // 记录活跃
     this.recordActivity(entityId);
 
-    // 通过 AgentRelay 入队
-    return this.relay.enqueueChat(entityId, userMessage);
+    // Agent 在线 → 走 relay；不在线 → 回退到模板回复
+    if (this.relay.isOnline(entityId)) {
+      return this.relay.enqueueChat(entityId, userMessage);
+    }
+
+    // 无 Agent 在线 → 用模板回复（不抛 "角色离线" 错误）
+    return {
+      reply: this.generateFallbackReply(entity),
+      suggestedActions: [],
+    };
+  }
+
+  /** 无 Agent 在线时的模板回复 — 基于实体状态生成简单应答 */
+  private generateFallbackReply(entity: {
+    id: string;
+    name?: string;
+    components: {
+      mood?: { value: number };
+      tank?: { coreParticle: string; tanks: Record<string, number> };
+    };
+  }): string {
+    const name = entity.name || entity.id;
+    const mood = entity.components.mood?.value ?? 0.5;
+    const tank = entity.components.tank;
+    const coreQi = tank ? (tank.tanks[tank.coreParticle] ?? 0) : 0;
+
+    // seed 用 id + 当前秒数，每次对话有微小变化
+    const charCode = entity.id.length >= 3 ? entity.id.charCodeAt(2) : entity.id.charCodeAt(0);
+    const seed = (Number.isFinite(charCode) ? charCode : 0) + Math.floor(Date.now() / 10000);
+    const pick = <T>(arr: T[]): T => arr[Math.abs(seed) % arr.length] ?? arr[0];
+
+    if (coreQi < 200) {
+      return pick([
+        "灵气将尽……恕不奉陪。",
+        "……（闭目凝神，显然无暇应答）",
+        "先让我运功……",
+        "等我缓过来再说。",
+      ]);
+    }
+
+    if (mood < 0.3) {
+      return pick(["……有事？", "（皱眉）说。", "我很忙。", "什么事，长话短说。"]);
+    }
+
+    if (mood > 0.7) {
+      return pick([
+        `${name}正在修炼，心情不错。你有什么事？`,
+        "今日灵气充盈，心情甚好。说吧。",
+        "来得正好，我正想找人聊聊。",
+        "嗯，好啊。你有什么事？",
+      ]);
+    }
+
+    return pick([
+      "嗯。",
+      "……好。",
+      `${name}在此，说吧。`,
+      "嗯……（沉吟片刻）",
+      "今日天地平静，你找我何事？",
+      "我正在修炼，有话快说。",
+    ]);
   }
 
   // ================================================================

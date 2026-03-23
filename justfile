@@ -1,26 +1,30 @@
 set allow-duplicate-recipes := true
 
-# 启动核心 API 服务器（内存存储，开发用，含 web 前端）
-start_mem:
-    npm run build -w @jindan/web
-    DATABASE_URL=memory npm run dev:core
+# 内存模式（开发用），例如：just mem run
+mem cmd:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case "{{cmd}}" in
+        run) npm run build -w @jindan/web && DATABASE_URL=memory npm run dev:core ;;
+        *)   echo "Usage: just mem [run]" && exit 1 ;;
+    esac
 
 # 开发模式：web 前端热重载（需配合 start_mem 的 API 服务）
 dev_web:
     npm run dev -w @jindan/web
 
-# Docker Compose 一键启动（PostgreSQL 持久化）
+# Docker Compose 前台启动（PostgreSQL 持久化）
 # 配置：packages/core/.env (JWT_SECRET, INVITE_CODE, SITE_ADDRESS 等)
-start_docker:
-    docker compose up --build
-
-# Docker Compose 后台启动
-start_docker_bg:
-    docker compose up --build -d
-
-# Docker Compose 停止并移除容器
-stop_docker:
-    docker compose down
+docker cmd:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case "{{cmd}}" in
+        start)  docker compose up --build -d ;;
+        run)    docker compose up --build ;;
+        stop)   docker compose down ;;
+        update) docker compose down && docker compose up --build -d ;;
+        *)      echo "Usage: just docker [start|run|stop|update]" && exit 1 ;;
+    esac
 
 # 调用 CLI，例如：just cli snapshot
 cli +args:

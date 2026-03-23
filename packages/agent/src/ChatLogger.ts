@@ -17,7 +17,7 @@ export interface CycleRecord {
 }
 
 export interface ChatRecord {
-  ts: string;         // ISO timestamp
+  ts: string; // ISO timestamp
   chatId: string;
   incomingMessage: string;
   llmReply: string;

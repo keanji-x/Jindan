@@ -16,6 +16,8 @@ describe("BotService", () => {
       getEntity: vi.fn(),
       setEntity: vi.fn(),
       performAction: vi.fn(),
+      events: { emit: vi.fn() },
+      currentTick: 0,
     };
 
     const users: Record<string, any> = {};
@@ -156,5 +158,65 @@ describe("BotService", () => {
 
     const reply = await bot.chat(token, "msg");
     expect(reply.reply).toBe("bounced");
+  });
+
+  it("should emit entity_released event on inactivity release", () => {
+    const emitted: { type: string; data: unknown }[] = [];
+    mockWorld.events = { emit: vi.fn((e: any) => emitted.push(e)) };
+    mockWorld.currentTick = 42;
+
+    mockWorld.getEntity.mockReturnValue({
+      id: "e1",
+      name: "TestEntity",
+      species: "human",
+      status: "alive",
+      components: { brain: { id: "external_llm", replyMode: "manual" } },
+    });
+
+    const result = bot.anonymousAttach("e1");
+    expect(result.secret).toBeDefined();
+
+    // Simulate time passing beyond inactivity timeout
+    const lastActivity = (bot as any).lastActivity as Map<string, number>;
+    lastActivity.set("e1", Date.now() - 31 * 60 * 1000);
+
+    bot.checkInactivity();
+
+    // Should have emitted entity_released
+    const releaseEvent = emitted.find((e) => e.type === "entity_released");
+    expect(releaseEvent).toBeDefined();
+    expect((releaseEvent!.data as any).entityId).toBe("e1");
+
+    // Entity should be released — secret removed
+    expect(mockStorage.removeEntity).toHaveBeenCalledWith("e1");
+    // Brain should be cleared + persisted
+    const entity = mockWorld.getEntity("e1");
+    expect(entity.components.brain).toBeUndefined();
+    expect(mockWorld.setEntity).toHaveBeenCalled();
+  });
+
+  it("should fallback to template reply when agent is offline", async () => {
+    bot.register("u1", "pass", "testcode");
+
+    mockWorld.getEntity.mockReturnValue({
+      id: "e1",
+      status: "alive",
+      name: "TestEntity",
+      components: {
+        mood: { value: 0.5 },
+        tank: { coreParticle: "ql", tanks: { ql: 1000 } },
+      },
+    });
+    const char = bot.attachCharacterForUser(bot.userLogin("u1", "pass").token, "e1");
+    const token = bot.authenticate(char.secret).token;
+
+    // Do NOT send heartbeat — Agent is offline
+    const reply = await bot.chat(token, "你好");
+
+    // Should get a template reply, not throw "角色离线"
+    expect(reply.reply).toBeDefined();
+    expect(typeof reply.reply).toBe("string");
+    expect(reply.reply.length).toBeGreaterThan(0);
+    expect(reply.suggestedActions).toEqual([]);
   });
 });
