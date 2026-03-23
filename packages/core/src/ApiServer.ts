@@ -481,9 +481,8 @@ export class ApiServer {
 
       // 也从实体 mailbox 读取未读消息，合并进 pendingChats
       const entity = this.world.getEntity(entityId);
-      const unreadMailbox = entity?.components.mailbox?.messages.filter(
-        (m) => !m.read && !m.isReply,
-      ) ?? [];
+      const unreadMailbox =
+        entity?.components.mailbox?.messages.filter((m) => !m.read && !m.isReply) ?? [];
       for (const msg of unreadMailbox) {
         pendingChats.push({
           chatId: `mailbox_${msg.id}`,

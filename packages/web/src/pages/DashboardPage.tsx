@@ -44,9 +44,9 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col">
-      {/* Main content — 2/3 column layout */}
-      <div className="flex-1 flex overflow-hidden">
+    <div className="h-screen flex flex-col overflow-hidden">
+      {/* Main content — 3 column layout, each column scrolls independently */}
+      <div className="flex-1 flex min-h-0">
         {/* Left: Character management */}
         <aside className="w-72 border-r border-white/[0.06] flex-shrink-0 overflow-y-auto">
           <div className="p-4 border-b border-white/[0.06]">
@@ -81,6 +81,7 @@ export default function DashboardPage() {
               entityId={activeCharId}
               secret={chatSecret}
               characterName={activeChar?.name || "未知"}
+              onRemove={handleRemoveCharacter}
             />
           </aside>
         )}

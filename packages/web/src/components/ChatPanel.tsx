@@ -12,9 +12,10 @@ interface Props {
   entityId: string;
   secret: string;
   characterName: string;
+  onRemove?: (entityId: string) => void;
 }
 
-export default function ChatPanel({ entityId, secret, characterName }: Props) {
+export default function ChatPanel({ entityId, secret, characterName, onRemove }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
@@ -33,7 +34,9 @@ export default function ChatPanel({ entityId, secret, characterName }: Props) {
         addMessage("system", `已连接 ${characterName} 的潜意识。`);
       })
       .catch((err) => {
-        setError(`连接失败: ${err.message}`);
+        // 私钥无效 — 自动移除角色，让用户重新夺舍
+        onRemove?.(entityId);
+        setError(`连接失败: ${err.message}。私钥已过期，请重新夺舍。`);
       });
   }, [entityId, secret, characterName]);
 
@@ -113,7 +116,7 @@ export default function ChatPanel({ entityId, secret, characterName }: Props) {
             className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
           >
             {msg.role === "system" ? (
-              <div className="text-[11px] text-slate-500 bg-white/[0.02] rounded-lg px-3 py-1.5 w-full text-center">
+              <div className="text-[11px] text-gold/70 bg-gold/[0.06] border border-gold/[0.12] rounded-lg px-3 py-1.5 w-full text-center">
                 {msg.text}
               </div>
             ) : (
@@ -121,8 +124,8 @@ export default function ChatPanel({ entityId, secret, characterName }: Props) {
                 <div
                   className={`rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${
                     msg.role === "user"
-                      ? "bg-qi/15 text-slate-200 rounded-br-md"
-                      : "bg-white/[0.05] text-slate-300 rounded-bl-md"
+                      ? "bg-qi/30 text-white border border-qi/20 rounded-br-md"
+                      : "bg-slate-700/60 text-slate-100 border border-white/[0.08] rounded-bl-md"
                   }`}
                 >
                   {msg.text}
@@ -172,7 +175,7 @@ export default function ChatPanel({ entityId, secret, characterName }: Props) {
             placeholder="对潜意识说..."
             rows={1}
             maxLength={500}
-            className="flex-1 bg-white/[0.04] border border-white/[0.08] rounded-xl px-3 py-2 text-sm text-slate-200 placeholder-slate-600 resize-none focus:border-qi/30 focus:outline-none transition-colors"
+            className="flex-1 bg-slate-700/80 border border-slate-500/50 rounded-xl px-3 py-2 text-sm text-slate-100 placeholder-slate-400 resize-none focus:border-qi/60 focus:outline-none transition-colors"
           />
           <button
             type="button"

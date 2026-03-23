@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
 import type { CharacterInfo } from "../api/client";
 
 const SPECIES = [
@@ -56,10 +55,7 @@ export default function CharacterPanel({ characters, activeCharId, onSelect, onR
   return (
     <div className="p-4 space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-bold text-slate-300 uppercase tracking-wider">角色</h2>
-        <Link to="/config" className="text-xs text-qi hover:text-qi/80 transition-colors">
-          探索大千 ← 向其夺舍
-        </Link>
+        <h2 className="text-sm font-bold text-slate-300 uppercase tracking-wider">夺舍角色</h2>
       </div>
 
       {error && <p className="text-xs text-danger">{error}</p>}

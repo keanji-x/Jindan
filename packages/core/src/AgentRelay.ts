@@ -14,7 +14,7 @@ import { randomBytes } from "node:crypto";
 export interface PendingChatRequest {
   chatId: string;
   message: string;
-  fromId?: string;   // 发送方实体 ID（信箱消息才有）
+  fromId?: string; // 发送方实体 ID（信箱消息才有）
   fromName?: string; // 发送方名字
 }
 

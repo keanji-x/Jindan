@@ -15,7 +15,7 @@ import type { ActionResolver } from "../types.js";
  */
 function generateReply(
   replier: Entity,
-  senderId: string,
+  _senderId: string,
   senderName: string,
   relation: number,
   _incomingMessage: string,
@@ -106,7 +106,7 @@ export const doChatReply: ActionResolver = (entity, _actionId, context) => {
   }
 
   // mailbox.messages 是 unshift 插入的（最新在前），所以最旧的未读在数组末尾
-  const msg = unread[unread.length - 1]!
+  const msg = unread[unread.length - 1]!;
   msg.read = true;
 
   const entityName = entity.name || entity.id;
