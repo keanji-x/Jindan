@@ -14,6 +14,7 @@ describe("BotService", () => {
         .fn()
         .mockImplementation((name, sp) => ({ id: "e1", name, species: sp, status: "alive" })),
       getEntity: vi.fn(),
+      setEntity: vi.fn(),
       performAction: vi.fn(),
     };
 

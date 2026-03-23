@@ -1,5 +1,5 @@
 import type { ReactorTemplate } from "../config/types.js";
-import { ACQUIRE, CHAT, DEVOUR, RECRUIT } from "../systems/InteractionSystem.js";
+import { ACQUIRE, CHAT, CHAT_REPLY, DEVOUR, RECRUIT } from "../systems/InteractionSystem.js";
 import { MEDITATE, REST } from "../systems/SingleEntitySystem.js";
 
 /** 宗门 — 巨大的灵气汇聚之地，视作巨型的社会实体 */
@@ -12,5 +12,5 @@ export const SectReactor: ReactorTemplate = {
   absorbSource: "members",
   baseDrainRate: 10,
   ownPolarity: { ql: 1.0, qs: 0.0 },
-  actions: [MEDITATE, DEVOUR, REST, CHAT, ACQUIRE, RECRUIT],
+  actions: [MEDITATE, DEVOUR, REST, CHAT, CHAT_REPLY, ACQUIRE, RECRUIT],
 };

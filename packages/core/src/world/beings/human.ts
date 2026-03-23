@@ -2,6 +2,7 @@ import type { ReactorTemplate } from "../config/types.js";
 import {
   ACQUIRE,
   CHAT,
+  CHAT_REPLY,
   COURT,
   DEVOUR,
   ENSLAVE,
@@ -33,6 +34,7 @@ export const HumanReactor: ReactorTemplate = {
     BREAKTHROUGH,
     REST,
     CHAT,
+    CHAT_REPLY,
     COURT,
     ACQUIRE,
     ENSLAVE,

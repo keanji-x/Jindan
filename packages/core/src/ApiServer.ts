@@ -478,12 +478,32 @@ export class ApiServer {
       if (!entityId) throw new ApiError("entityId is required");
       this.requireAgentSecret(req, entityId);
       const pendingChats = this.bot.relay.heartbeat(entityId);
+
+      // 也从实体 mailbox 读取未读消息，合并进 pendingChats
+      const entity = this.world.getEntity(entityId);
+      const unreadMailbox = entity?.components.mailbox?.messages.filter(
+        (m) => !m.read && !m.isReply,
+      ) ?? [];
+      for (const msg of unreadMailbox) {
+        pendingChats.push({
+          chatId: `mailbox_${msg.id}`,
+          // 结构化来源信息，让 chatHandler 知道是谁发的
+          fromId: msg.fromId,
+          fromName: msg.fromName,
+          message: msg.message,
+        });
+        // 立刻标记为已读，防止下次心跳重复投递
+        msg.read = true;
+      }
+      // Bug fix: 把 read=true 持久化到 storage，重启后不再重投
+      if (unreadMailbox.length > 0 && entity) {
+        this.world.setEntity(entity);
+      }
+
       return { ok: true, pendingChats };
     }
 
     if (method === "POST" && path === "/agent/chat-reply") {
-      // chat-reply 使用 chatId，无法直接映射到 entityId
-      // 仍需 agent secret header 存在作为基本校验
       const secret = this.extractAgentSecret(req);
       if (!secret) throw new ApiError("Agent secret required (X-Agent-Secret header)");
       const { chatId, reply, suggestedActions, entityStatus } = body as {
@@ -494,6 +514,48 @@ export class ApiServer {
       };
       if (!chatId) throw new ApiError("chatId is required");
       if (!reply) throw new ApiError("reply is required");
+
+      // mailbox_ 前缀：来自信箱的消息，通过 world effects 回复
+      if (chatId.startsWith("mailbox_")) {
+        const msgId = chatId.slice("mailbox_".length);
+        const entityId = this.bot.resolveEntityId(secret);
+        const entity = this.world.getEntity(entityId);
+        const origMsg = entity?.components.mailbox?.messages.find((m) => m.id === msgId);
+        if (origMsg) {
+          const { nanoid } = await import("nanoid");
+          // 把 LLM 回复推入发送方信箱
+          this.world.applyExternalEffect({
+            type: "push_mailbox",
+            targetId: origMsg.fromId,
+            message: {
+              id: nanoid(),
+              tick: this.world.currentTick,
+              fromId: entityId,
+              fromName: entity?.name ?? entityId,
+              message: reply,
+              read: false,
+              isReply: true,
+            },
+          });
+          // 同时发出 entity_chat 事件让 UI 可见
+          this.world.applyExternalEffect({
+            type: "emit_event",
+            event: {
+              tick: this.world.currentTick,
+              type: "entity_chat",
+              data: {
+                entity: { id: entityId, name: entity?.name ?? entityId },
+                target: { id: origMsg.fromId, name: origMsg.fromName },
+                message: reply,
+              },
+              message: `${entity?.name ?? entityId} 回复 ${origMsg.fromName}：「${reply}」`,
+            },
+          });
+        }
+        return { ok: true, source: "mailbox" };
+      }
+
+      // 旧路径：通过 pendingChats queue resolve
       const resolved = this.bot.relay.resolveChat(chatId, {
         reply,
         suggestedActions,

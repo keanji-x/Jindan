@@ -342,10 +342,10 @@ export class BotService {
     if (!entity) throw new Error("找不到该实体");
     if (entity.status !== "alive") throw new Error("该实体无法连接 (已死亡或封印)");
 
-    // 如果该目标实体原本没有 AI 组件挂载，则默认塞入一个标记，表明它现在受外置大脑驱动
-    if (!entity.components.brain) {
-      entity.components.brain = { id: "external_llm" };
-    }
+    // Agent 接管：强制设为 external_llm + manual，覆盖原有 brain
+    // （normalizeEntity 可能已将旧实体的 replyMode 补成 "auto"）
+    entity.components.brain = { id: "external_llm", replyMode: "manual" };
+    this.world.setEntity(entity); // 持久化到 storage，重启后不会回退
 
     // 生成接管私钥: jd_ + 24 字符随机 hex
     const secret = `jd_${randomBytes(12).toString("hex")}`;
@@ -387,7 +387,13 @@ export class BotService {
     const hashed = this.hashSecret(secret);
     const entityId = this.storage.getEntityIdBySecret(hashed);
     if (!entityId) throw new Error("私钥无效");
-    if (!this.world.getEntity(entityId)) throw new Error("角色已不存在");
+    const entity = this.world.getEntity(entityId);
+    if (!entity) throw new Error("角色已不存在");
+
+    // Agent 每次启动都强制设为 manual，防止 normalizeEntity 回退
+    entity.components.brain = { id: "external_llm", replyMode: "manual" };
+    this.world.setEntity(entity);
+
     return entityId;
   }
 

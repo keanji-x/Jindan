@@ -56,6 +56,12 @@ export interface ActionDef {
   relationRange?: [number, number];
   /** 吸收倍率参数（仅 absorb 类 action 使用） */
   absorbRate?: { base: number; perRealm: number };
+  /**
+   * 仅内部使用（不暴露给 Agent OODA 循环）。
+   * 例如 chat_reply 是 world 触发的 NPC cascade 机制，
+   * Agent 有 LLM 主动回复，不应该用这个 action。
+   */
+  internalOnly?: boolean;
 
   /**
    * [可选] 前置条件校验 — 由各 System 自行判定该 Action 是否可执行。
