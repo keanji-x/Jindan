@@ -156,11 +156,16 @@ export class TestHarness {
         const speciesLimit = reactor?.proportionLimit(realm) ?? 0.05;
         const qiMax = Math.floor(speciesLimit * UNIVERSE.totalParticles);
         const qiRatio = qiMax > 0 ? qiCurrent / qiMax : 0;
+        const rels = this.world.relations.getAll(npc.id);
+        const avgRelation =
+          rels.length > 0 ? rels.reduce((sum, r) => sum + r.data.score, 0) / rels.length : 0;
         const decision = brain.decide(actions, {
           qiCurrent,
           qiMax,
           qiRatio,
           mood: npc.components.mood?.value ?? 0.5,
+          personality: npc.components.personality,
+          avgRelation,
         });
         if (decision) {
           this.world.performAction(npc.id, decision.action, decision.targetId);

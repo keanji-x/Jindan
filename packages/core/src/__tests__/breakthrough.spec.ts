@@ -44,15 +44,15 @@ function makeContext(ambientQl: number): { ctx: ActionContext; events: WorldEven
 }
 
 describe("Breakthrough System", () => {
-  it("empirical success rate at 90% qi", () => {
+  it("empirical success rate scales with qi ratio (P = ratio^k)", () => {
     applyParams(BALANCE);
 
+    // At realm=1, proportionLimit=0.05. With total=30000, maxQi = 1500
+    // ratio = 1400/1500 ≈ 0.933, P = 0.933^k
     let successes = 0;
     const N = 1000;
 
     for (let i = 0; i < N; i++) {
-      // At realm=1, proportionLimit=0.05. With total=30000, 5% = 1500
-      // Need qi >= 1500 * 0.9 = 1350 to attempt breakthrough
       const e = makeHuman(1400);
       const { ctx } = makeContext(1000);
       const res = doBreakthrough(e, "breakthrough", ctx);
@@ -60,9 +60,10 @@ describe("Breakthrough System", () => {
     }
 
     const rate = successes / N;
-    console.log(`  Breakthrough rate (90% qi, ambient=1000): ${(rate * 100).toFixed(1)}%`);
-    expect(rate).toBeGreaterThan(0.3);
-    expect(rate).toBeLessThan(0.8);
+    console.log(`  Breakthrough rate (ratio≈0.93): ${(rate * 100).toFixed(1)}%`);
+    // With k=3: P = 0.933^3 ≈ 0.812
+    expect(rate).toBeGreaterThan(0.5);
+    expect(rate).toBeLessThan(1.0);
   });
 
   it("80% qi threshold allows breakthrough attempt", () => {
@@ -75,14 +76,22 @@ describe("Breakthrough System", () => {
     expect(res.status).not.toBe("aborted");
   });
 
-  it("below threshold rejects breakthrough", () => {
+  it("very low qi has near-zero success rate but still attempts", () => {
     applyParams(BALANCE);
 
-    const e = makeHuman(1); // Very low qi — below any proportion threshold
-    const { ctx } = makeContext(1000);
-    const res = doBreakthrough(e, "breakthrough", ctx);
-    expect(res.status).toBe("aborted");
-    expect(res.reason).toContain("灵气占比不足");
+    let successes = 0;
+    const N = 500;
+    for (let i = 0; i < N; i++) {
+      const e = makeHuman(1); // ratio ≈ 0.0007, P ≈ 0
+      const { ctx } = makeContext(1000);
+      const res = doBreakthrough(e, "breakthrough", ctx);
+      if (res.status === "success") successes++;
+    }
+
+    const rate = successes / N;
+    console.log(`  Breakthrough rate (ratio≈0): ${(rate * 100).toFixed(1)}%`);
+    // Should almost never succeed
+    expect(rate).toBeLessThan(0.05);
   });
 });
 

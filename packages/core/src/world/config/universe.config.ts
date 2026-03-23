@@ -23,12 +23,10 @@ export const UNIVERSE: UniverseConfig = {
   // ── Breakthrough ───────────────────────────────────────────
   breakthrough: {
     qiCostPerRealm: 20,
-    /** Required qi ratio to attempt breakthrough (proportion-based) */
-    minQiRatio: 0.8,
-    baseSuccessRate: 0.3,
-    maxSuccessRate: 0.85,
-    failLossRatio: 0,
-    burnRatio: 0.8,
+    /** P(success) = ratio^3. ratio=0.5→12.5%, ratio=0.8→51%, ratio=1.0→100% */
+    successExponent: 3,
+    /** Fraction of core qi burned on successful breakthrough (0.5 = keep 50%) */
+    burnRatio: 0.5,
     maxRealm: 10,
   },
 

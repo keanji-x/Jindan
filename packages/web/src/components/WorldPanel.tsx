@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import {
+  type ChronicleEntry,
   type EntityData,
   type GraveyardGroup,
   type GraveyardLife,
+  getChronicle,
   getEntities,
   getGraveyard,
   getRelations,
@@ -53,103 +55,45 @@ interface Props {
   activeEntityId: string | null;
 }
 
-interface LogEntry {
-  tick: number;
-  msg: string;
-  entityId?: string;
-}
-
 export default function WorldPanel({ activeEntityId }: Props) {
   const [world, setWorld] = useState<WorldStatus | null>(null);
   const [entities, setEntities] = useState<EntityData[]>([]);
   const [relations, setRelations] = useState<Record<string, RelationEdge>>({});
   const [graveyard, setGraveyard] = useState<GraveyardGroup[]>([]);
-  const [logs, setLogs] = useState<LogEntry[]>([]);
-  const [logTab, setLogTab] = useState<"global" | "personal">("global");
+  const [chronicle, setChronicle] = useState<ChronicleEntry[]>([]);
+  const [expandedTick, setExpandedTick] = useState<number | null>(null);
   const [viewMode, setViewMode] = useState<"list" | "graph">("list");
-  const wsRef = useRef<WebSocket | null>(null);
 
-  // Fetch initial data
+  // ── Polling: fetch everything every 3 seconds ──────────
   useEffect(() => {
-    getWorldStatus()
-      .then(setWorld)
-      .catch(() => {});
-    getEntities()
-      .then(setEntities)
-      .catch(() => {});
-    getRelations()
-      .then(setRelations)
-      .catch(() => {});
-    getGraveyard()
-      .then(setGraveyard)
-      .catch(() => {});
-  }, []);
-
-  // Poll graveyard every 5 seconds
-  useEffect(() => {
-    const timer = setInterval(() => {
+    const fetchAll = () => {
+      getWorldStatus()
+        .then(setWorld)
+        .catch(() => {});
+      getEntities()
+        .then(setEntities)
+        .catch(() => {});
+      getRelations()
+        .then(setRelations)
+        .catch(() => {});
       getGraveyard()
         .then(setGraveyard)
         .catch(() => {});
-    }, 5000);
+      getChronicle()
+        .then(setChronicle)
+        .catch(() => {});
+    };
+    fetchAll(); // initial
+    const timer = setInterval(fetchAll, 3000);
     return () => clearInterval(timer);
   }, []);
 
-  // WebSocket for live updates (anonymous — no token needed)
-  useEffect(() => {
-    const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const ws = new WebSocket(`${proto}//${window.location.host}/api`);
-    wsRef.current = ws;
-
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data) as {
-          type?: string;
-          message?: string;
-          tick?: number;
-          data?: {
-            entities?: EntityData[];
-            relations?: Record<string, RelationEdge>;
-            entity?: { id?: string };
-          };
-        };
-        if (data.type === "world_snapshot" || data.type === "tick_complete") {
-          if (data.data?.entities) setEntities(data.data.entities);
-          if (data.data?.relations) setRelations(data.data.relations);
-          setWorld((prev) => ({ ...prev, ...data.data }) as WorldStatus);
-        } else if (data.type && data.message) {
-          // Event log messages
-          setLogs((prev) => {
-            const next = [
-              ...prev,
-              {
-                tick: data.tick ?? 0,
-                msg: data.message!,
-                entityId: data.data?.entity?.id,
-              },
-            ];
-            return next.slice(-200);
-          });
-        }
-      } catch {
-        /* ignore */
-      }
-    };
-
-    ws.onclose = () => {
-      setTimeout(() => {}, 3000);
-    };
-
-    return () => ws.close();
-  }, []);
-
-  // ── Extract world data (matching original web logic) ────
+  // ── Extract world data ─────────────────────────────────
   const tick = world?.tick ?? 0;
   const daoTanks = world?.daoTanks;
   const ambientQi = daoTanks?.ql ?? 0;
   const shaQi = Math.abs(daoTanks?.qs ?? 0);
 
-  // Entity Qi = sum of all alive entities' core particle tanks
   let entityQi = 0;
   for (const e of entities) {
     if (e.status === "alive" && e.components) {
@@ -161,12 +105,11 @@ export default function WorldPanel({ activeEntityId }: Props) {
     }
   }
 
-  const lingQi = ambientQi + entityQi; // 天地正气 = 游离灵气 + 众生之气
-  const totalOuter = ambientQi + entityQi || 1; // outer ring total
-  const totalInner = lingQi + shaQi || 1; // inner ring total
+  const lingQi = ambientQi + entityQi;
+  const totalOuter = ambientQi + entityQi || 1;
+  const totalInner = lingQi + shaQi || 1;
   const popTotal = entities.filter((e) => e.status === "alive").length;
 
-  // Sort entities by realm (include lingering for 生灵榜)
   const sorted = [...entities]
     .filter((e) => e.status === "alive" || e.status === "lingering")
     .sort(
@@ -179,42 +122,9 @@ export default function WorldPanel({ activeEntityId }: Props) {
     : null;
   const coreParticle = focusEntity?.components?.tank?.coreParticle ?? "ql";
   const focusQi = focusEntity?.components?.tank?.tanks?.[coreParticle] ?? 0;
-  // Realm-based fill: each realm fills 10% of the sphere (凡人=10%, 真仙=100%)
   const focusRealm0 = focusEntity?.components?.cultivation?.realm ?? 0;
   const focusQiPct = Math.min(100, Math.max(5, (focusRealm0 + 1) * 10));
-
   const focusRealm = focusEntity?.components?.cultivation?.realm ?? 0;
-
-  // Filter logs for personal tab
-  const personalLogs = logs.filter((l) => l.entityId === activeEntityId);
-  const displayLogs = logTab === "global" ? logs : personalLogs;
-
-  // Connection status
-  const [connected, setConnected] = useState(false);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: tracks wsRef.current deliberately
-  useEffect(() => {
-    const ws = wsRef.current;
-    if (!ws) return;
-    const onOpen = () => setConnected(true);
-    const onClose = () => setConnected(false);
-    ws.addEventListener("open", onOpen);
-    ws.addEventListener("close", onClose);
-    if (ws.readyState === WebSocket.OPEN) setConnected(true);
-    return () => {
-      ws.removeEventListener("open", onOpen);
-      ws.removeEventListener("close", onClose);
-    };
-  }, [wsRef.current]);
-
-  // Log auto-scroll
-  const logEndRef = useRef<HTMLDivElement>(null);
-  const scrollLogs = useCallback(() => {
-    logEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, []);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: we want to scroll when log count changes
-  useEffect(() => {
-    scrollLogs();
-  }, [displayLogs.length, scrollLogs]);
 
   const outerR = 55,
     innerR = 38;
@@ -237,18 +147,6 @@ export default function WorldPanel({ activeEntityId }: Props) {
           <div className="flex items-center gap-2 bg-white/[0.03] px-3 py-1.5 rounded-full border border-white/[0.08]">
             <span className="text-xs text-slate-400 uppercase tracking-wider">纪日</span>
             <span className="font-title text-lg font-bold text-gold text-gold-glow">{tick}</span>
-          </div>
-          <div
-            className={`flex items-center gap-2 text-xs px-3 py-1.5 rounded-full border ${
-              connected
-                ? "text-success border-success/30 bg-success/5"
-                : "text-danger border-danger/30 bg-danger/5"
-            }`}
-          >
-            <span
-              className={`w-2 h-2 rounded-full ${connected ? "bg-success shadow-[0_0_8px_#10b981]" : "bg-danger shadow-[0_0_8px_#f43f5e] animate-pulse"}`}
-            />
-            <span>{connected ? "灵网已通" : "灵网断接"}</span>
           </div>
         </div>
       </div>
@@ -284,7 +182,6 @@ export default function WorldPanel({ activeEntityId }: Props) {
             <div className="relative w-[140px] h-[140px] flex-shrink-0">
               <svg viewBox="0 0 140 140" className="w-full h-full overflow-visible">
                 <title>双极灵池光环</title>
-                {/* Outer Ring */}
                 <circle className="ring-bg" cx="70" cy="70" r={outerR} />
                 <circle
                   cx="70"
@@ -310,7 +207,6 @@ export default function WorldPanel({ activeEntityId }: Props) {
                   }}
                   transform="rotate(-90 70 70)"
                 />
-                {/* Inner Ring */}
                 <circle className="ring-bg" cx="70" cy="70" r={innerR} />
                 <circle
                   cx="70"
@@ -337,7 +233,6 @@ export default function WorldPanel({ activeEntityId }: Props) {
                   transform="rotate(-90 70 70)"
                 />
               </svg>
-              {/* Center Label */}
               <div className="absolute inset-0 flex flex-col items-center justify-center">
                 <div className="text-[0.65rem] text-slate-400 tracking-wider">宇宙总气</div>
                 <div
@@ -424,7 +319,6 @@ export default function WorldPanel({ activeEntityId }: Props) {
           </div>
 
           {viewMode === "list" ? (
-            /* ─── List View (生灵榜) ─── */
             <>
               <div className="grid grid-cols-[2fr_1fr] px-3 pb-2 text-[0.7rem] text-slate-500 uppercase tracking-wider">
                 <span>修仙者</span>
@@ -484,7 +378,6 @@ export default function WorldPanel({ activeEntityId }: Props) {
               </div>
             </>
           ) : (
-            /* ─── Graph View (因缘图谱) ─── */
             <RelationGraph
               entities={entities}
               relations={relations}
@@ -541,7 +434,7 @@ export default function WorldPanel({ activeEntityId }: Props) {
         </div>
       )}
 
-      {/* ═══════ BOTTOM: Focus + Logs ═══════ */}
+      {/* ═══════ BOTTOM: Focus + Chronicle ═══════ */}
       <div className="grid grid-cols-1 lg:grid-cols-[350px_1fr] gap-4 lg:gap-6">
         {/* Entity Focus Panel */}
         <div
@@ -553,7 +446,6 @@ export default function WorldPanel({ activeEntityId }: Props) {
           </h2>
           {focusEntity ? (
             <div className="flex flex-col items-center gap-4">
-              {/* Jindan Sphere */}
               <div className="liquid-sphere">
                 <div className="liquid" style={{ height: `${focusQiPct}%` }} />
                 <div className="sphere-glare" />
@@ -569,8 +461,6 @@ export default function WorldPanel({ activeEntityId }: Props) {
                   {formatNum(focusQi)}
                 </div>
               </div>
-
-              {/* Details */}
               <div className="w-full bg-black/20 rounded-xl p-3 border border-white/[0.03] space-y-2">
                 <div className="flex justify-between items-center text-sm py-1">
                   <span className="text-slate-400">境界</span>
@@ -587,54 +477,56 @@ export default function WorldPanel({ activeEntityId }: Props) {
           )}
         </div>
 
-        {/* Event Logs Panel */}
+        {/* ═══════ Chronicle Timeline ═══════ */}
         <div className="glass-panel !p-0">
-          <div className="flex border-b border-white/[0.08] bg-black/20">
-            <button
-              type="button"
-              onClick={() => setLogTab("global")}
-              className={`flex-1 py-3 px-4 text-sm font-body cursor-pointer transition-all relative ${
-                logTab === "global"
-                  ? "text-qi font-bold"
-                  : "text-slate-400 hover:text-white hover:bg-white/[0.02]"
-              }`}
-            >
-              天地异象录
-              {logTab === "global" && (
-                <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-qi shadow-[0_-2px_10px_rgba(56,189,248,0.5)]" />
-              )}
-            </button>
-            <button
-              type="button"
-              onClick={() => setLogTab("personal")}
-              className={`flex-1 py-3 px-4 text-sm font-body cursor-pointer transition-all relative ${
-                logTab === "personal"
-                  ? "text-qi font-bold"
-                  : "text-slate-400 hover:text-white hover:bg-white/[0.02]"
-              }`}
-            >
-              个人仙缘
-              {logTab === "personal" && (
-                <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-qi shadow-[0_-2px_10px_rgba(56,189,248,0.5)]" />
-              )}
-            </button>
+          <div className="border-b border-white/[0.08] bg-black/20 px-4 py-3">
+            <h2 className="section-title !mb-0">📜 编年史 · Chronicle</h2>
           </div>
-          <div className="flex-1 overflow-y-auto p-3 space-y-1 max-h-[350px] min-h-[200px]">
-            {displayLogs.length > 0 ? (
-              displayLogs.slice(-100).map((log) => (
-                <div key={`log-${log.tick}-${log.msg.slice(0, 20)}`} className="log-entry">
-                  <span className="text-[0.7rem] text-slate-600 font-mono mr-2">[{log.tick}]</span>
-                  {log.msg}
-                </div>
-              ))
+          <div className="flex-1 overflow-y-auto p-3 space-y-2 max-h-[350px] min-h-[200px]">
+            {chronicle.length > 0 ? (
+              [...chronicle].reverse().map((entry) => {
+                const isExpanded = expandedTick === entry.tick;
+                // Intensity color: low=slate, mid=amber, high=rose
+                const intensityColor =
+                  entry.intensity >= 0.6
+                    ? "border-rose-500/30 bg-rose-500/[0.04]"
+                    : entry.intensity >= 0.3
+                      ? "border-amber-500/30 bg-amber-500/[0.04]"
+                      : "border-white/[0.08] bg-white/[0.02]";
+                const intensityDot =
+                  entry.intensity >= 0.6
+                    ? "bg-rose-500 shadow-[0_0_6px_#f43f5e]"
+                    : entry.intensity >= 0.3
+                      ? "bg-amber-400 shadow-[0_0_6px_#fbbf24]"
+                      : "bg-slate-500";
+
+                return (
+                  <button
+                    type="button"
+                    key={`chr-${entry.tick}`}
+                    onClick={() => setExpandedTick(isExpanded ? null : entry.tick)}
+                    className={`w-full text-left px-3 py-2.5 rounded-lg border transition-all cursor-pointer hover:translate-x-0.5 ${intensityColor}`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className={`w-2 h-2 rounded-full flex-shrink-0 ${intensityDot}`} />
+                      <span className="text-[0.7rem] text-slate-500 font-mono">[{entry.tick}]</span>
+                      <span className="text-sm text-slate-200 font-bold truncate">
+                        {entry.headline}
+                      </span>
+                    </div>
+                    {isExpanded && entry.body && (
+                      <div className="mt-2 ml-4 text-xs text-slate-400 leading-relaxed whitespace-pre-line border-l-2 border-white/[0.06] pl-3">
+                        {entry.body}
+                      </div>
+                    )}
+                  </button>
+                );
+              })
             ) : (
               <div className="flex items-center justify-center h-full text-sm text-slate-500 italic py-8">
-                {logTab === "personal"
-                  ? "请先在生灵榜点击一名修仙者，以探寻其仙缘轨迹。"
-                  : "等待天地异象..."}
+                天地初开，尚无记载...
               </div>
             )}
-            <div ref={logEndRef} />
           </div>
         </div>
       </div>

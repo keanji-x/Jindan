@@ -27,31 +27,15 @@ export const doBreakthrough: ActionResolver = (entity, _actionId, context) => {
   const reactorTemplate = UNIVERSE.reactors[entity.species];
   if (!reactorTemplate) return { status: "aborted", reason: "无反应炉配置" };
 
-  // 占比判定突破条件
+  // 占比判定突破概率: P(success) = ratio^k
   const bt = UNIVERSE.breakthrough;
   const worldTotal = ambientPool.total;
   const currentProportion = worldTotal > 0 ? coreQi / worldTotal : 0;
   const speciesLimit = reactorTemplate.proportionLimit(cultComp.realm);
+  const ratio = speciesLimit > 0 ? Math.min(currentProportion / speciesLimit, 1) : 0;
+  const successRate = ratio ** bt.successExponent;
 
-  // 需要占比达到物种容忍比例的 minQiRatio 才能尝试突破
-  // 例: limit=0.05, minQiRatio=0.9 → 需占比达到 0.045
-  if (currentProportion < speciesLimit * bt.minQiRatio) {
-    return {
-      status: "aborted",
-      reason: `灵气占比不足(需${Math.round(speciesLimit * bt.minQiRatio * 100)}%世界总量)`,
-    };
-  }
-
-  // 动态突破概率判定
-  const progress = Math.min(
-    1.0,
-    (currentProportion - speciesLimit * bt.minQiRatio) /
-      (speciesLimit * (1 - bt.minQiRatio) || 0.01),
-  );
-  const actualSuccessRate =
-    bt.baseSuccessRate + progress * (bt.maxSuccessRate - bt.baseSuccessRate);
-
-  if (Math.random() > actualSuccessRate) {
+  if (Math.random() > successRate) {
     const failEvent: Effect = {
       type: "emit_event",
       event: {

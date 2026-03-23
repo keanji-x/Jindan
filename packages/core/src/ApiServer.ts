@@ -127,6 +127,9 @@ export class ApiServer {
               const qiRatio = speciesLimit > 0 ? proportion / speciesLimit : 0;
               const qiMax = Math.floor(speciesLimit * UNIVERSE.totalParticles);
               const recentEvents = this.world.eventGraph.getRecentForEntity(npc.id);
+              const rels = this.world.relations.getAll(npc.id);
+              const avgRelation =
+                rels.length > 0 ? rels.reduce((sum, r) => sum + r.data.score, 0) / rels.length : 0;
 
               const decision = brain.decide(actions, {
                 qiCurrent,
@@ -134,6 +137,8 @@ export class ApiServer {
                 qiRatio,
                 mood: npc.components.mood?.value ?? 0.5,
                 recentEvents,
+                personality: npc.components.personality,
+                avgRelation,
               });
               if (decision) {
                 this.world.performAction(
@@ -403,6 +408,10 @@ export class ApiServer {
     if (method === "GET" && path === "/entities") return this.world.getAliveEntities();
 
     if (method === "GET" && path === "/relations") return this.world.relations.toJSON();
+
+    if (method === "GET" && path === "/chronicle") {
+      return this.world.chronicle.getRecent(30);
+    }
 
     // ── Character 路由 (匿名夺舍) ──────────────────────────
 
