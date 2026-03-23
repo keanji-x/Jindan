@@ -2,12 +2,11 @@ import { ActionRegistry } from "../systems/ActionRegistry.js";
 import type { AvailableAction } from "../types.js";
 import { HeuristicSearchOptimizer } from "./optimizer/engine.js";
 import { EntityActionSimulator, type EntityState } from "./optimizer/entity.js";
-import { QiRatioObjective } from "./optimizer/objectives.js";
+import { DEFAULT_PERSONALITY, PersonalityObjective } from "./optimizer/PersonalityObjective.js";
 import type { AgentBrain, BrainContext, BrainDecision } from "./types.js";
 
-// A pre-instantiated optimizer engine
+// A pre-instantiated simulator (stateless, can be shared)
 const simulator = new EntityActionSimulator();
-const objective = new QiRatioObjective();
 
 /**
  * Default actions per tick (used when brainDepth not specified).
@@ -20,7 +19,7 @@ export const ACTIONS_PER_TICK = 5;
  * Exploration rate: probability of picking a random affordable action
  * instead of the optimizer's best. Drives action diversity.
  */
-const EXPLORATION_RATE = 0.2;
+const EXPLORATION_RATE = 0.35;
 
 export const HeuristicOptimizerBrain: AgentBrain = {
   id: "heuristic_optimizer",
@@ -34,12 +33,16 @@ export const HeuristicOptimizerBrain: AgentBrain = {
       return { action: pick.action, targetId: pick.targetId };
     }
 
+    const personality = ctx.personality ?? DEFAULT_PERSONALITY;
+    const objective = new PersonalityObjective(personality);
     const depth = ctx.brainDepth ?? ACTIONS_PER_TICK;
     const optimizer = new HeuristicSearchOptimizer<EntityState, AvailableAction>();
     const initialState: EntityState = {
       qiCurrent: ctx.qiCurrent,
       qiMax: ctx.qiMax,
       mood: ctx.mood,
+      avgRelation: ctx.avgRelation ?? 0,
+      personality,
     };
     const getAvailableActions = (state: EntityState) =>
       actions.filter((a) => a.possible && state.qiCurrent >= (ActionRegistry.cost(a.action) ?? 0));
@@ -61,50 +64,44 @@ export const HeuristicOptimizerBrain: AgentBrain = {
     const possibleActions = actions.filter((a) => a.possible);
     if (possibleActions.length === 0) return [{ action: "rest" }];
 
-    const plan: BrainDecision[] = [];
+    const personality = ctx.personality ?? DEFAULT_PERSONALITY;
+    const objective = new PersonalityObjective(personality);
 
+    const initialState: EntityState = {
+      qiCurrent: ctx.qiCurrent,
+      qiMax: ctx.qiMax,
+      mood: ctx.mood,
+      avgRelation: ctx.avgRelation ?? 0,
+      personality,
+    };
+
+    const optimizer = new HeuristicSearchOptimizer<EntityState, AvailableAction>();
+    const getAvailableActions = (state: EntityState) =>
+      actions.filter((a) => a.possible && state.qiCurrent >= (ActionRegistry.cost(a.action) ?? 0));
+
+    // Get full optimizer plan once
+    const optimizerPlan = optimizer.optimizePlan(
+      initialState,
+      getAvailableActions,
+      simulator,
+      objective,
+      depth,
+    );
+
+    // Merge: each step has EXPLORATION_RATE chance of going random
+    const plan: BrainDecision[] = [];
     for (let step = 0; step < depth; step++) {
-      // Exploration: 20% chance to pick a random action at each step
       if (Math.random() < EXPLORATION_RATE) {
         const pick = possibleActions[Math.floor(Math.random() * possibleActions.length)]!;
         plan.push({ action: pick.action, targetId: pick.targetId });
-        continue;
-      }
-
-      // First non-exploration step: use full optimizer plan
-      if (plan.length === 0 || plan.every((p) => p.action === "rest")) {
-        const initialState: EntityState = {
-          qiCurrent: ctx.qiCurrent,
-          qiMax: ctx.qiMax,
-          mood: ctx.mood,
-        };
-
-        const optimizer = new HeuristicSearchOptimizer<EntityState, AvailableAction>();
-
-        const getAvailableActions = (state: EntityState) => {
-          return actions.filter((a) => {
-            if (!a.possible) return false;
-            const cost = ActionRegistry.cost(a.action) ?? 0;
-            return state.qiCurrent >= cost;
-          });
-        };
-
-        const actionPlan = optimizer.optimizePlan(
-          initialState,
-          getAvailableActions,
-          simulator,
-          objective,
-          depth,
-        );
-
-        // Convert full plan to BrainDecisions
-        for (const a of actionPlan) {
-          plan.push({ action: a.action, targetId: a.targetId });
-        }
-        break; // Optimizer already returned full plan
+      } else {
+        const optimizerStep = optimizerPlan[step];
+        if (optimizerStep)
+          plan.push({ action: optimizerStep.action, targetId: optimizerStep.targetId });
+        else plan.push({ action: "rest" });
       }
     }
 
-    return plan.slice(0, depth);
+    return plan;
   },
 };

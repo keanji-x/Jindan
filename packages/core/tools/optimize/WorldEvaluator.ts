@@ -115,7 +115,9 @@ export function evaluateWorld(opts: EvalOptions): WorldScore {
         ? Math.floor(reactor.proportionLimit(realm) * UNIVERSE.totalParticles)
         : 1;
       const qiRatio = qiMax > 0 ? qiCurrent / qiMax : 0;
-      const brainCtx = { qiCurrent, qiMax, qiRatio, mood: npc.components.mood?.value ?? 0.5, brainDepth: reactor?.brainDepth };
+      const rels = world.relations.getAll(npc.id);
+      const avgRelation = rels.length > 0 ? rels.reduce((s, r) => s + r.data.score, 0) / rels.length : 0;
+      const brainCtx = { qiCurrent, qiMax, qiRatio, mood: npc.components.mood?.value ?? 0.5, brainDepth: reactor?.brainDepth, personality: npc.components.personality, avgRelation };
 
       const plan = brain.decidePlan
         ? brain.decidePlan(actions, brainCtx)
@@ -141,7 +143,9 @@ export function evaluateWorld(opts: EvalOptions): WorldScore {
         const pReactor = UNIVERSE.reactors[playerEntity.species];
         const pMax = pReactor ? Math.floor(pReactor.proportionLimit(pRealm) * UNIVERSE.totalParticles) : 1;
         const pRatio = pMax > 0 ? pQi / pMax : 0;
-        const pCtx = { qiCurrent: pQi, qiMax: pMax, qiRatio: pRatio, mood: playerEntity.components.mood?.value ?? 0.5, brainDepth: pReactor?.brainDepth };
+        const pRels = world.relations.getAll(playerId);
+        const pAvgRel = pRels.length > 0 ? pRels.reduce((s, r) => s + r.data.score, 0) / pRels.length : 0;
+        const pCtx = { qiCurrent: pQi, qiMax: pMax, qiRatio: pRatio, mood: playerEntity.components.mood?.value ?? 0.5, brainDepth: pReactor?.brainDepth, personality: playerEntity.components.personality, avgRelation: pAvgRel };
 
         const pPlan = playerBrain.decidePlan
           ? playerBrain.decidePlan(pActions, pCtx)
@@ -216,13 +220,9 @@ export function evaluateWorld(opts: EvalOptions): WorldScore {
   const actionDiversity = actionDiversitySum / actualTicks;
 
   const total =
-    0.15 * playerSurvival +
-    0.10 * speciesDiversity +
-    0.15 * breakthroughRate +
-    0.05 * ecosystemHealth +
-    0.35 * actionDiversity +   // Core optimization target: action diversity
-    0.10 * ambientEntityScore +
-    0.10 * shaLingScore;
+    0.40 * actionDiversity +    // Core: action variety
+    0.30 * speciesDiversity +   // Core: species alive
+    0.30 * ecosystemHealth;     // Core: survival ratio
 
   // ── Restore UNIVERSE ──
   UNIVERSE.totalParticles = origTotal;

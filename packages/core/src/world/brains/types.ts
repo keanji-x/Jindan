@@ -1,4 +1,5 @@
 import type { ActionId, AvailableAction } from "../types.js";
+import type { Personality } from "./optimizer/PersonalityObjective.js";
 
 /** Lightweight context passed to NPC brains for decision-making */
 export interface BrainContext {
@@ -12,6 +13,10 @@ export interface BrainContext {
   mood: number;
   /** Notification: recent events affecting this entity */
   recentEvents?: import("../types.js").WorldEventRecord[];
+  /** 性格向量 — 影响多目标优化权重 */
+  personality?: Personality;
+  /** Average relation score with known entities (-1..1) */
+  avgRelation?: number;
   /** Per-species brain lookahead depth (defaults to ACTIONS_PER_TICK) */
   brainDepth?: number;
 }

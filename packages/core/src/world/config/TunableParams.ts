@@ -21,10 +21,8 @@ export interface SearchParams {
   // ── Breakthrough ──
   /** Absolute qi cost per realm for breakthrough */
   qiCostPerRealm: number;
-  /** Base probability of breakthrough success */
-  breakthroughSuccessRate: number;
-  /** Required qi proportion ratio to attempt breakthrough (e.g. 0.8 of proportionLimit) */
-  breakthroughThreshold: number;
+  /** P(success) = ratio^successExponent */
+  successExponent: number;
 
   // ── Ecology ──
   /** Spawn chance base for SpawnPool */
@@ -36,18 +34,16 @@ export const PARAM_RANGES: Record<keyof SearchParams, [number, number]> = {
   drainScale: [0.5, 2.0],
   absorbScale: [0.5, 2.0],
   qiCostPerRealm: [2, 20],
-  breakthroughSuccessRate: [0.1, 0.6],
-  breakthroughThreshold: [0.5, 0.95],
+  successExponent: [1.5, 6],
   spawnBaseChance: [0.005, 0.05],
 };
 
 export const DEFAULT_PARAMS: SearchParams = {
-  drainBase: 1.66,
+  drainBase: 1.35,
   drainScale: 1.12,
   absorbScale: 1.87,
   qiCostPerRealm: 10.2,
-  breakthroughSuccessRate: 0.31,
-  breakthroughThreshold: 0.4,
+  successExponent: 3,
   spawnBaseChance: 0.021,
 };
 
@@ -62,8 +58,7 @@ export function applyParams(p: SearchParams): void {
 
   // Breakthrough
   UNIVERSE.breakthrough.qiCostPerRealm = p.qiCostPerRealm;
-  UNIVERSE.breakthrough.minQiRatio = p.breakthroughThreshold;
-  UNIVERSE.breakthrough.baseSuccessRate = p.breakthroughSuccessRate;
+  UNIVERSE.breakthrough.successExponent = p.successExponent;
 
   // Ecology
   UNIVERSE.ecology.spawnBaseChance = p.spawnBaseChance;

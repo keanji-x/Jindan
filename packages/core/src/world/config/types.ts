@@ -110,10 +110,9 @@ export interface UniverseConfig {
   /** Breakthrough parameters */
   breakthrough: {
     qiCostPerRealm: number;
-    minQiRatio: number;
-    baseSuccessRate: number;
-    maxSuccessRate: number;
-    failLossRatio: number;
+    /** P(success) = ratio^successExponent. Higher = harder at low ratio */
+    successExponent: number;
+    /** Fraction of core qi burned on successful breakthrough */
     burnRatio: number;
     /** Maximum realm achievable */
     maxRealm?: number;

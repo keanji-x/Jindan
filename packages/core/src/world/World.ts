@@ -15,6 +15,7 @@ import { EventBus } from "../EventBus.js";
 import { MemoryStorage } from "../storage/MemoryStorage.js";
 import type { StorageBackend } from "../storage/StorageBackend.js";
 import { BeingLedger } from "./beings/BeingLedger.js";
+import { Chronicle } from "./Chronicle.js";
 import {
   buildContextSnapshot,
   type ContextSnapshot,
@@ -23,6 +24,8 @@ import {
 import { BALANCE } from "./config/balance.config.js";
 import { applyParams } from "./config/TunableParams.js";
 import { UNIVERSE } from "./config/universe.config.js";
+import { DramaDirector } from "./drama/DramaDirector.js";
+import { BUILTIN_PLOTS } from "./drama/templates.js";
 import { EventGraph } from "./EventGraph.js";
 import { EffectPipeline } from "./effects/EffectPipeline.js";
 import { GraphRegistry } from "./effects/GraphRegistry.js";
@@ -60,6 +63,8 @@ export class World {
   public readonly eventGraph: EventGraph;
   public readonly relations: RelationGraph;
   public readonly effectPipeline: EffectPipeline;
+  public readonly chronicle: Chronicle;
+  public readonly dramaDirector: DramaDirector;
   private _tick: number = 0;
 
   constructor(storage?: StorageBackend) {
@@ -71,6 +76,9 @@ export class World {
     this.eventGraph = new EventGraph(this.storage, UNIVERSE.ledgerWindowSize);
     this.relations = new RelationGraph(this.storage);
     this.effectPipeline = new EffectPipeline();
+    this.chronicle = new Chronicle();
+    this.dramaDirector = new DramaDirector();
+    this.dramaDirector.registerAll(BUILTIN_PLOTS);
 
     this.registerSystems();
 
@@ -556,12 +564,21 @@ export class World {
 
     // 天道裁决现已通过 DrainSystem 标准代谢处理，极端占比由 DaoEventSystem 天劫触发
 
+    // 2. 剧情导演：检查冲突模板并注入 Effect
+    const dramaEffects = this.dramaDirector.evaluate(this, this._tick);
+    for (const effect of dramaEffects) {
+      this.applyEffect(effect);
+    }
+
     this.events.emit({
       tick: this._tick,
       type: "tick_complete",
       data: this.getSnapshot(),
       message: Formatters.tickComplete(this._tick),
     });
+
+    // 3. 编年史：聚合本 tick 叙事摘要
+    this.chronicle.summarizeTick(this, this._tick);
 
     // Flush dirty state to persistent storage
     // Dao state persisted via entity storage (no separate qiPool)

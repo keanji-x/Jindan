@@ -1,12 +1,5 @@
-// ============================================================
-// Entity Factory — creating new entities (empty vessels)
-//
-// 第一守恒定律：粒子只能通过 ParticleTransfer 在容器间转移。
-// 生灵诞生只分配空壳（ID + 空 tank），不创造也不消耗粒子。
-// 新生灵必须通过打坐/光合等 action 从天地吸取第一口灵气。
-// ============================================================
-
 import { nanoid } from "nanoid";
+import { randomPersonality } from "./brains/optimizer/PersonalityObjective.js";
 import type { ParticleId } from "./config/types.js";
 import { UNIVERSE } from "./config/universe.config.js";
 import type { Entity } from "./types.js";
@@ -43,6 +36,9 @@ export function createEntity(name: string, species: string, options: SpawnOption
   // 默认挂载物种配置的AI大脑，除非显式覆盖
   const brainId = options.brainId !== undefined ? options.brainId : reactor.npcBrainId;
 
+  // 按物种倾向随机生成性格（非 dao 实体才有性格）
+  const personality = species !== "dao" ? randomPersonality(species) : undefined;
+
   const entity: Entity = {
     id: `${species[0]}_${nanoid(8)}`,
     soulId: nanoid(10),
@@ -56,6 +52,7 @@ export function createEntity(name: string, species: string, options: SpawnOption
       cultivation: { realm },
       mood: { value: 0.5 },
       ...(brainId ? { brain: { id: brainId, replyMode: "auto" as const } } : {}),
+      ...(personality ? { personality } : {}),
     },
   };
 

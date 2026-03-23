@@ -5,6 +5,7 @@
 // ============================================================
 
 import type { Life } from "../memory/types.js";
+import type { Personality } from "./brains/optimizer/PersonalityObjective.js";
 import type { ParticleId } from "./config/types.js";
 import type { ActiveGraph } from "./effects/types.js";
 
@@ -83,6 +84,8 @@ export interface Entity {
     emotion?: { tag: string };
     /** LLM-generated short-term goal (短期目标, 每轮更新) */
     shortTermGoal?: { text: string };
+    /** 性格向量 — 驱动 NPC 多目标优化决策 */
+    personality?: Personality;
   };
 }
 
@@ -199,7 +202,13 @@ export type WorldEventType =
   | "entity_released"
   | "tick_complete"
   | "system_warning"
-  | "report";
+  | "report"
+  // ── 剧情导演事件 ──
+  | "drama_rescue"
+  | "drama_heavenly_jealousy"
+  | "drama_betrayal"
+  | "drama_qi_storm"
+  | "drama_sect_crisis";
 
 /** 世界事件 */
 export interface WorldEvent {

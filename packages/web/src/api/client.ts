@@ -153,3 +153,17 @@ export function getWorldStatus() {
 export function getGraveyard() {
   return request<GraveyardGroup[]>("GET", "/graveyard");
 }
+
+// ── Chronicle ───────────────────────────────────────────
+
+export interface ChronicleEntry {
+  tick: number;
+  headline: string;
+  body: string;
+  intensity: number;
+  involvedIds: string[];
+}
+
+export function getChronicle() {
+  return request<ChronicleEntry[]>("GET", "/chronicle");
+}
