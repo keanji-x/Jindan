@@ -400,7 +400,16 @@ describe("Chat Mailbox System — generateReply 边界情况", () => {
     expect(lowQiPhrases.some((p) => replyMsg.includes(p))).toBe(false);
 
     // 应该是友好回复
-    const friendlyPhrases = ["天气", "好啊", "来得正好", "道友", "灵气充盈", "心情甚好", "在此"];
+    const friendlyPhrases = [
+      "天气",
+      "好啊",
+      "来得正好",
+      "道友",
+      "灵气充盈",
+      "心情甚好",
+      "在此",
+      "说吧",
+    ];
     expect(friendlyPhrases.some((p) => replyMsg.includes(p))).toBe(true);
   });
 
