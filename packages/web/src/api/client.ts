@@ -93,7 +93,6 @@ export interface EntityComponents {
   tank?: {
     coreParticle?: string;
     tanks?: Record<string, number>;
-    maxTanks?: Record<string, number>;
   };
   cultivation?: {
     realm?: number;

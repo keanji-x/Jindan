@@ -179,8 +179,9 @@ export default function WorldPanel({ activeEntityId }: Props) {
     : null;
   const coreParticle = focusEntity?.components?.tank?.coreParticle ?? "ql";
   const focusQi = focusEntity?.components?.tank?.tanks?.[coreParticle] ?? 0;
-  const focusMaxQi = focusEntity?.components?.tank?.maxTanks?.[coreParticle] ?? 1;
-  const focusQiPct = focusMaxQi > 0 ? Math.round((focusQi / focusMaxQi) * 100) : 0;
+  // Realm-based fill: each realm fills 10% of the sphere (凡人=10%, 真仙=100%)
+  const focusRealm0 = focusEntity?.components?.cultivation?.realm ?? 0;
+  const focusQiPct = Math.min(100, Math.max(5, (focusRealm0 + 1) * 10));
 
   const focusRealm = focusEntity?.components?.cultivation?.realm ?? 0;
 
@@ -559,16 +560,14 @@ export default function WorldPanel({ activeEntityId }: Props) {
               </div>
               <div className="text-center">
                 <div className="text-[0.7rem] text-slate-400 uppercase tracking-widest mb-0.5">
-                  灵力容纳 (Qi)
+                  灵力 (Qi)
                 </div>
                 <div
-                  className="font-title text-lg text-white"
+                  className="font-title text-2xl text-white"
                   style={{ textShadow: "0 0 15px rgba(56,189,248,0.5)" }}
                 >
-                  {formatNum(focusQi)} <span className="text-slate-500 text-sm">/</span>{" "}
-                  {formatNum(focusMaxQi)}
+                  {formatNum(focusQi)}
                 </div>
-                <div className="text-sm text-qi mt-0.5">{focusQiPct}%</div>
               </div>
 
               {/* Details */}
