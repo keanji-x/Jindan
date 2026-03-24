@@ -74,12 +74,13 @@ cat > packages/agent/.env << EOF
 OPENAI_API_KEY=sk-your-key
 OPENAI_BASE_URL=https://api.openai.com/v1   # 兼容任意 OpenAI API 格式
 OPENAI_MODEL=gpt-4o-mini                     # 支持 GPT-4o / Claude / Llama 等
-JINDAN_SECRET=你的实体私钥                     # 从 Web UI 夺舍后获得
+JINDAN_SECRETS=私钥1,私钥2,私钥3              # 逗号分隔，支持多角色同时运行
+AGENT_HEARTBEAT=10                            # 每个 agent 轮询间隔（秒）
 JINDAN_HOST=https://jindan.abyssal-capital.com  # 公网地址（自建则改成你的地址）
 EOF
 
 # 3. 启动！
-just start_agent
+just agent start
 ```
 
 你的 AI 现在活在金丹世界里了。它会自主：💬 与世界中的生灵交谈 · 🌍 探索自己的故事 · 💕 结为道侣 · 📖 写墓志铭 · 🔄 轮回转世
