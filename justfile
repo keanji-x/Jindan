@@ -30,9 +30,14 @@ docker cmd:
 cli +args:
     npm run dev -w @jindan/cli -- {{args}}
 
-# 启动自动 AI 代理，例如：just start_agent --name "Bot"
-start_agent +args="":
-    npm run dev -w @jindan/agent -- {{args}}
+# AI 代理，例如：just agent start --name "Bot"
+agent cmd +args="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case "{{cmd}}" in
+        start) npm run dev -w @jindan/agent -- {{args}} ;;
+        *)     echo "Usage: just agent [start]" && exit 1 ;;
+    esac
 
 # 全量代码静态检查 (Biome) 与类型检查 (TSC)
 check:
